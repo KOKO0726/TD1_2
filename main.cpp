@@ -25,8 +25,8 @@ const int kMaxEBullets = 96;  // ボスの弾
 const int kPlatformNum = 4;
 
 const int kPlayerMaxHp = 5;
-const int kBossMaxHp = 60;
 const int kIntroFrames = 120;
+const int kTotalStages = 3;   // ステージ数
 
 // ==================================================
 // 構造体
@@ -64,40 +64,30 @@ struct Bullet {
 	bool active;
 };
 
-// ボスの弾(wave=trueは地面を走る衝撃波)
 struct EBullet {
 	float x, y, vx, vy, r;
 	bool active;
 	bool wave;
-	bool reflected; // パリィで跳ね返された弾(ボスに当たる)
+	bool reflected; // パリィで跳ね返された弾
 };
 
 struct Platform {
 	float x, y, w; // 上面のみ判定
 };
 
-enum BossState {
-	kBWalk,       // 歩いて接近
-	kBShoot,      // 弾を撃つ
-	kBJumpWind,   // ジャンプ前の溜め
-	kBAir,        // 空中(着地で衝撃波)
-	kBChargeWind, // 突進前の溜め
-	kBCharge,     // 突進
-	kBBurst,      // 全方位弾
-	kBStun        // パリィで怯み中
-};
-
 struct Boss {
 	float x, y, w, h;
 	float vx, vy;
 	int hp;
+	int maxHp;
 	int state;
 	int timer;
 	int dir;
 	int flash;
+	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
 };
 
-enum Scene { kTitle, kPlay, kGameOver, kVictory };
+enum Scene { kTitle, kStageSelect, kPlay, kGameOver, kVictory };
 
 // ==================================================
 // 描画ヘルパー(画面シェイク対応)
@@ -149,12 +139,11 @@ static void FireEBullet(EBullet* arr, float x, float y, float vx, float vy, floa
 	}
 }
 
-// 角度指定で撃つ
 static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r) {
 	FireEBullet(arr, x, y, cosf(angle) * speed, sinf(angle) * speed, r, false);
 }
 
-static void ResetGame(Player& pl, Bullet* bullets, EBullet* ebullets, Boss& boss, float groundY) {
+static void ResetGame(Player& pl, Bullet* bullets, EBullet* ebullets, Boss& boss, float groundY, int stage) {
 	pl.x = 200.0f;
 	pl.y = groundY - 48.0f;
 	pl.vx = pl.vy = 0.0f;
@@ -190,14 +179,18 @@ static void ResetGame(Player& pl, Bullet* bullets, EBullet* ebullets, Boss& boss
 	boss.x = 1000.0f;
 	boss.y = groundY - boss.h;
 	boss.vx = boss.vy = 0.0f;
-	boss.hp = kBossMaxHp;
-	boss.state = kBWalk;
+	boss.type = stage; // ステージごとにボスの種類を決定 (0:スナイパー, 1:クラッシャー, 2:ウィザード)
+
+	const int bossHpTable[kTotalStages] = { 45, 60, 75 };
+	boss.maxHp = bossHpTable[stage];
+	boss.hp = boss.maxHp;
+
+	boss.state = 0;
 	boss.timer = 60;
 	boss.dir = -1;
 	boss.flash = 0;
 }
 
-// 近接攻撃を中断(被弾・ジャンプ・ダッシュ・パリィ・着地)
 static void CancelAttack(Player& pl) {
 	pl.atkTimer = 0;
 	pl.atkStep = 0;
@@ -205,10 +198,6 @@ static void CancelAttack(Player& pl) {
 	pl.comboWindow = 0;
 }
 
-// 近接攻撃の開始
-//  地上: 踏み込みながらの重い一撃(ダメージ3)
-//  空中: 1〜3段目は素早い斬り(ダメージ2)、4段目は大振りの締め(ダメージ4)。
-//        いずれも攻撃中は空中に留まる
 static void StartAttack(Player& pl, bool air, int step, int dir) {
 	pl.dir = dir;
 	pl.atkAir = air;
@@ -237,7 +226,6 @@ static void StartAttack(Player& pl, bool air, int step, int dir) {
 	}
 }
 
-// 現在の攻撃の判定ボックス
 static void MeleeBox(const Player& pl, float* x, float* y, float* w, float* h) {
 	float ov = 0.0f;
 	if (!pl.atkAir) {
@@ -267,31 +255,16 @@ static void HurtPlayer(Player& pl) {
 	pl.onGround = false;
 }
 
-// ボスのフェーズ(1〜3)
-static int BossPhase(const Boss& b) {
-	if (b.hp > kBossMaxHp * 2 / 3) return 1;
-	if (b.hp > kBossMaxHp / 3) return 2;
-	return 3;
-}
-
-// Windowsアプリでのエントリーポイント(main関数)
+// Windowsアプリのエントリーポイント
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
-
-	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, kScreenW, kScreenH);
-
-	// フォントの初期化(Novice::Initialize の後に1回だけ)
-	// EnkaDotMincho24.ttf は exe を実行するフォルダ(プロジェクトフォルダ)に置くこと
-	// 画面に出す文字は半角英数字だけなので、追加の漢字は不要
 	GetFont().Create(L"PixelMplus12-Bold.ttf", L"PixelMplus12", 28);
 
-	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
-	// ---------- ゲームデータ ----------
 	Platform platforms[kPlatformNum] = {
 		{0.0f, 640.0f, 1280.0f}, // 地面
 		{120.0f, 500.0f, 260.0f},
@@ -304,43 +277,58 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Bullet bullets[kMaxBullets];
 	EBullet ebullets[kMaxEBullets];
 	Boss boss;
-	ResetGame(player, bullets, ebullets, boss, groundY);
+	int selectedStage = 0;
+	int currentStage = 0;
+	int bestFrames[kTotalStages] = { 0, 0, 0 };
+
+	ResetGame(player, bullets, ebullets, boss, groundY, selectedStage);
 
 	Scene scene = kTitle;
 	int introTimer = 0;
 	int shake = 0;
 	int playFrames = 0;
-	int bestFrames = 0; // 0 = 未クリア
 	int frame = 0;
 
-	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
-		// フレームの開始
 		Novice::BeginFrame();
 
-		// キー入力を受け取る
 		memcpy(preKeys, keys, 256);
 		Novice::GetHitKeyStateAll(keys);
 
 		frame++;
 
-		///
-		/// ↓更新処理ここから
-		///
-
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
 
-		if (scene == kTitle || scene == kGameOver || scene == kVictory) {
+		if (scene == kTitle) {
 			if (pressStart) {
-				ResetGame(player, bullets, ebullets, boss, groundY);
+				scene = kStageSelect;
+			}
+		}
+		else if (scene == kStageSelect) {
+			if ((preKeys[DIK_A] == 0 && keys[DIK_A] != 0) || (preKeys[DIK_LEFT] == 0 && keys[DIK_LEFT] != 0)) {
+				selectedStage = (selectedStage - 1 + kTotalStages) % kTotalStages;
+			}
+			if ((preKeys[DIK_D] == 0 && keys[DIK_D] != 0) || (preKeys[DIK_RIGHT] == 0 && keys[DIK_RIGHT] != 0)) {
+				selectedStage = (selectedStage + 1) % kTotalStages;
+			}
+			if (pressStart) {
+				currentStage = selectedStage;
+				ResetGame(player, bullets, ebullets, boss, groundY, currentStage);
 				introTimer = kIntroFrames;
 				playFrames = 0;
 				shake = 0;
 				scene = kPlay;
 			}
+			if (preKeys[DIK_BACKSPACE] == 0 && keys[DIK_BACKSPACE] != 0) {
+				scene = kTitle;
+			}
+		}
+		else if (scene == kGameOver || scene == kVictory) {
+			if (pressStart) {
+				scene = kStageSelect;
+			}
 		}
 		else if (scene == kPlay) {
-
 			// ----- プレイヤー操作 -----
 			player.vx = 0.0f;
 			if (keys[DIK_A] || keys[DIK_LEFT]) {
@@ -354,13 +342,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			bool jumpTrigger = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) ||
 				(preKeys[DIK_UP] == 0 && keys[DIK_UP] != 0);
-			// クールダウン類
 			if (player.dashCooldown > 0) player.dashCooldown--;
 			if (player.parryCooldown > 0) player.parryCooldown--;
 			if (player.parryTimer > 0) player.parryTimer--;
 			if (player.parryFlash > 0) player.parryFlash--;
 
-			// ジャンプ(地上で1回 + 空中で1回 = 二段ジャンプ)
 			if (jumpTrigger && player.dashTimer == 0) {
 				if (player.onGround) {
 					CancelAttack(player);
@@ -375,7 +361,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// ダッシュ (L / LSHIFT / C) 空中でも可、空中では着地までに1回
 			bool dashTrigger = (preKeys[DIK_L] == 0 && keys[DIK_L] != 0) || (preKeys[DIK_LSHIFT] == 0 && keys[DIK_LSHIFT] != 0) ||
 				(preKeys[DIK_C] == 0 && keys[DIK_C] != 0);
 			if (dashTrigger && player.dashTimer == 0 && player.dashCooldown == 0 && player.parryTimer == 0 && (player.onGround || player.airDashLeft > 0)) {
@@ -390,7 +375,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (!player.onGround) player.airDashLeft--;
 			}
 
-			// パリィ (I / X)
 			bool parryTrigger = (preKeys[DIK_I] == 0 && keys[DIK_I] != 0) || (preKeys[DIK_X] == 0 && keys[DIK_X] != 0);
 			if (parryTrigger && player.parryCooldown == 0 && player.dashTimer == 0) {
 				CancelAttack(player);
@@ -398,10 +382,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				player.parryCooldown = 45;
 			}
 
-			// 近接攻撃 (U / V)
 			bool atkTrigger = (preKeys[DIK_U] == 0 && keys[DIK_U] != 0) || (preKeys[DIK_V] == 0 && keys[DIK_V] != 0);
 			if (atkTrigger && player.dashTimer == 0 && player.parryTimer == 0) {
-				// 向き: 方向キー優先、無ければボスの方を向く
 				int adir = player.dir;
 				if (keys[DIK_A] || keys[DIK_LEFT]) {
 					adir = -1;
@@ -413,7 +395,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					adir = (boss.x + boss.w * 0.5f > player.x + player.w * 0.5f) ? 1 : -1;
 				}
 
-				// 空中コンボの続き(当たっていれば、振り終わり際か猶予中に入力で次の段へ)
 				bool canNext = player.atkAir && player.atkHit && player.atkStep > 0 && player.atkStep < 4 && (player.atkTimer <= 6 || player.comboWindow > 0);
 				if (!player.onGround && canNext) {
 					StartAttack(player, true, player.atkStep + 1, adir);
@@ -429,24 +410,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// 攻撃状態の進行
 			if (player.atkTimer > 0) {
 				player.atkTimer--;
 				if (player.atkTimer == 0) {
 					if (player.atkAir && player.atkHit && player.atkStep < 4) {
-						player.comboWindow = 22; // 次の入力待ち(空中に留まる)
+						player.comboWindow = 22;
 					}
 					else {
-						player.atkStep = 0; // 空振り・最終段・地上攻撃はここで終了
+						player.atkStep = 0;
 					}
 				}
 			}
 			else if (player.comboWindow > 0) {
 				player.comboWindow--;
-				if (player.comboWindow == 0) player.atkStep = 0; // コンボ終了
+				if (player.comboWindow == 0) player.atkStep = 0;
 			}
 
-			// 弾の発射 (J / Z / K)
 			if (player.shotCooldown > 0) player.shotCooldown--;
 			if ((keys[DIK_J] || keys[DIK_Z] || keys[DIK_K]) && player.shotCooldown == 0) {
 				for (int i = 0; i < kMaxBullets; i++) {
@@ -461,10 +440,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// ----- プレイヤー移動 -----
-			// 近接攻撃中の移動
-			//  地上: 操作不能で、振り始めに前へ踏み込む
-			//  空中: 横移動は鈍り、コンボ中は重力を受けず空中に留まる
 			bool hover = false;
 			if (player.atkTimer > 0) {
 				if (!player.atkAir) {
@@ -506,9 +481,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				player.jumpCount = 0;
 				player.airDashLeft = 1;
 				player.airComboLeft = 1;
-				if (player.atkAir) CancelAttack(player); // 空中コンボは着地で終了
+				if (player.atkAir) CancelAttack(player);
 			}
-			// 足場から歩いて落ちた場合は1回目のジャンプを消費済みにする
 			if (!player.onGround && player.jumpCount == 0) player.jumpCount = 1;
 
 			if (player.invincible > 0) player.invincible--;
@@ -516,7 +490,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (shake > 0) shake--;
 			playFrames++;
 
-			// ----- プレイヤーの弾 -----
 			for (int i = 0; i < kMaxBullets; i++) {
 				if (!bullets[i].active) continue;
 				bullets[i].x += bullets[i].vx;
@@ -531,25 +504,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// ----- 近接攻撃の当たり判定 -----
 			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
 				float ax, ay, aw, ah;
 				MeleeBox(player, &ax, &ay, &aw, &ah);
 
-				// ボスへのヒット(1振りにつき1回)
 				if (introTimer == 0 && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 					bool finisher = player.atkAir && player.atkStep == 4;
 					player.atkHit = true;
 					boss.hp -= player.atkDmg;
 					boss.flash = 6;
 					shake = finisher ? 14 : 6;
-					if (player.invincible < 15) player.invincible = 15; // ヒット確認中の安全確保
-					// ノックバック(締めと地上攻撃は大きめ)
+					if (player.invincible < 15) player.invincible = 15;
 					float knock = finisher ? 50.0f : (!player.atkAir ? 20.0f : 6.0f);
 					boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
 				}
 
-				// 小さな弾は斬り落とせる(衝撃波と跳ね返し弾は対象外)
 				for (int i = 0; i < kMaxEBullets; i++) {
 					EBullet& eb = ebullets[i];
 					if (!eb.active || eb.wave || eb.reflected) continue;
@@ -559,147 +528,177 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// ----- ボスAI -----
 			if (introTimer > 0) {
 				introTimer--;
 			}
 			else {
-				int phase = BossPhase(boss);
 				float bcx = boss.x + boss.w * 0.5f;
 				float bcy = boss.y + boss.h * 0.5f;
 				float pcx = player.x + player.w * 0.5f;
 				float pcy = player.y + player.h * 0.5f;
 				float aim = atan2f(pcy - bcy, pcx - bcx);
 
-				switch (boss.state) {
-				case kBWalk: {
-					boss.dir = (pcx > bcx) ? 1 : -1;
-					boss.x += boss.dir * (1.2f + 0.5f * phase);
-					boss.timer--;
-					if (boss.timer <= 0) {
-						int choices = phase + 1; // P1:2種 P2:3種 P3:4種
-						int pick = rand() % choices;
-						if (pick == 0) {
-							boss.state = kBShoot;
-							boss.timer = 60;
+				// ==========================================
+				// 各ステージ（ボスタイプ）ごとの完全に異なるAI処理
+				// ==========================================
+				if (boss.type == 0) {
+					// ------------------------------------------
+					// STAGE 1: スナイパー型ボス（遠距離から正確な弾幕・レーザー風狙撃）
+					// ------------------------------------------
+					switch (boss.state) {
+					case 0: // 待機・移動
+						boss.dir = (pcx > bcx) ? 1 : -1;
+						boss.x += boss.dir * 1.5f;
+						boss.timer--;
+						if (boss.timer <= 0) {
+							boss.state = (rand() % 2 == 0) ? 1 : 2;
+							boss.timer = (boss.state == 1) ? 50 : 70;
 						}
-						else if (pick == 1) {
-							boss.state = kBJumpWind;
-							boss.timer = 25;
+						break;
+					case 1: // スナイパー連射
+						boss.timer--;
+						if (boss.timer % 15 == 0) {
+							FireAngle(ebullets, bcx, bcy - 20.0f, aim, 9.0f, 8.0f);
 						}
-						else if (pick == 2) {
-							boss.state = kBChargeWind;
-							boss.timer = 40;
-							boss.dir = (pcx > bcx) ? 1 : -1;
-						}
-						else {
-							boss.state = kBBurst;
+						if (boss.timer <= 0) {
+							boss.state = 0;
 							boss.timer = 70;
 						}
-					}
-					break;
-				}
-				case kBShoot: {
-					boss.dir = (pcx > bcx) ? 1 : -1;
-					boss.timer--;
-					if (boss.timer == 45 || boss.timer == 30 || boss.timer == 15) {
-						int n = (phase == 1) ? 1 : (phase == 2 ? 3 : 5);
-						for (int i = 0; i < n; i++) {
-							float a = aim + (i - (n - 1) * 0.5f) * 0.25f;
-							FireAngle(ebullets, bcx, bcy - 20.0f, a, 6.0f + phase, 10.0f);
+						break;
+					case 2: // 三方向スプレッド弾
+						boss.timer--;
+						if (boss.timer == 35) {
+							for (int i = -1; i <= 1; i++) {
+								FireAngle(ebullets, bcx, bcy, aim + i * 0.2f, 7.0f, 10.0f);
+							}
 						}
-					}
-					if (boss.timer <= 0) {
-						boss.state = kBWalk;
-						boss.timer = 80 - phase * 12;
-					}
-					break;
-				}
-				case kBJumpWind: {
-					boss.timer--;
-					if (boss.timer <= 0) {
-						boss.vy = -23.0f;
-						boss.vx = Clamp((pcx - bcx) / 35.0f, -9.0f, 9.0f);
-						boss.state = kBAir;
-					}
-					break;
-				}
-				case kBAir: {
-					boss.vy += kGravity;
-					boss.x += boss.vx;
-					boss.y += boss.vy;
-					boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
-					if (boss.y + boss.h >= groundY) {
-						boss.y = groundY - boss.h;
-						boss.vy = 0.0f;
-						shake = 16;
-						float ws = 6.0f + phase * 1.5f;
-						FireEBullet(ebullets, boss.x - 10.0f, groundY - 14.0f, -ws, 0.0f, 14.0f, true);
-						FireEBullet(ebullets, boss.x + boss.w + 10.0f, groundY - 14.0f, ws, 0.0f, 14.0f, true);
-						boss.state = kBWalk;
-						boss.timer = 80 - phase * 12;
-					}
-					break;
-				}
-				case kBChargeWind: {
-					boss.timer--;
-					if (boss.timer <= 0) {
-						boss.state = kBCharge;
-						boss.timer = 60;
-					}
-					break;
-				}
-				case kBCharge: {
-					boss.x += boss.dir * 14.0f;
-					boss.timer--;
-					bool wall = false;
-					if (boss.x <= 0.0f) {
-						boss.x = 0.0f;
-						wall = true;
-					}
-					if (boss.x + boss.w >= kScreenW) {
-						boss.x = kScreenW - boss.w;
-						wall = true;
-					}
-					if (wall) {
-						shake = 14;
-						// 壁にぶつかると天井から弾が降ってくる
-						for (int i = 0; i < 5; i++) {
-							FireEBullet(ebullets, 200.0f + static_cast<float>(rand() % 880), -10.0f, 0.0f, 5.0f, 12.0f, false);
+						if (boss.timer <= 0) {
+							boss.state = 0;
+							boss.timer = 90;
 						}
+						break;
+					case 3: // 怯み (Stun)
+						boss.timer--;
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+						break;
 					}
-					if (wall || boss.timer <= 0) {
-						boss.state = kBWalk;
-						boss.timer = 90 - phase * 12;
-					}
-					break;
 				}
-				case kBBurst: {
-					boss.timer--;
-					if (boss.timer == 50 || boss.timer == 25) {
-						float off = (boss.timer == 50) ? 0.0f : kPi / 14.0f;
-						for (int i = 0; i < 14; i++) {
-							FireAngle(ebullets, bcx, bcy, off + i * (2.0f * kPi / 14.0f), 5.0f, 10.0f);
+				else if (boss.type == 1) {
+					// ------------------------------------------
+					// STAGE 2: クラッシャー型ボス（重量級の突進と強力なジャンプ衝撃波）
+					// ------------------------------------------
+					switch (boss.state) {
+					case 0: // 徘徊・地面這いずり
+						boss.dir = (pcx > bcx) ? 1 : -1;
+						boss.x += boss.dir * 2.5f;
+						boss.timer--;
+						if (boss.timer <= 0) {
+							boss.state = (rand() % 2 == 0) ? 1 : 2; // 突進 or ジャンプ衝撃波
+							if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
+							else { boss.timer = 25; }
 						}
+						break;
+					case 1: // 高速突進 (Charge)
+						boss.x += boss.dir * 16.0f;
+						boss.timer--;
+						if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
+							shake = 12;
+							boss.state = 0;
+							boss.timer = 80;
+						}
+						break;
+					case 2: // ジャンプ溜め
+						boss.timer--;
+						if (boss.timer <= 0) {
+							boss.vy = -22.0f;
+							boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
+							boss.state = 3;
+						}
+						break;
+					case 3: // 空中から急降下
+						boss.vy += kGravity;
+						boss.x += boss.vx;
+						boss.y += boss.vy;
+						boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
+						if (boss.y + boss.h >= groundY) {
+							boss.y = groundY - boss.h;
+							boss.vy = 0.0f;
+							shake = 18;
+							// 両側に衝撃波を放つ
+							FireEBullet(ebullets, boss.x, groundY - 14.0f, -8.0f, 0.0f, 16.0f, true);
+							FireEBullet(ebullets, boss.x + boss.w, groundY - 14.0f, 8.0f, 0.0f, 16.0f, true);
+							boss.state = 0;
+							boss.timer = 90;
+						}
+						break;
+					case 4: // 怯み
+						boss.timer--;
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+						break;
 					}
-					if (boss.timer <= 0) {
-						boss.state = kBWalk;
-						boss.timer = 80 - phase * 12;
+				}
+				else {
+					// ------------------------------------------
+					// STAGE 3: ウィザード型ボス（全方位弾・トリッキーな浮遊・爆発弾幕）
+					// ------------------------------------------
+					switch (boss.state) {
+					case 0: // 浮遊移動
+						boss.dir = (pcx > bcx) ? 1 : -1;
+						boss.x += boss.dir * 2.0f;
+						// ふわふわ上下移動
+						boss.y = 400.0f + sinf(frame * 0.08f) * 120.0f;
+						boss.timer--;
+						if (boss.timer <= 0) {
+							int pick = rand() % 3;
+							if (pick == 0) boss.state = 1;      // 全方位サークル弾
+							else if (pick == 1) boss.state = 2; // 自機狙い連射
+							else boss.state = 3;                // テレポート魔法陣
+							boss.timer = 60;
+						}
+						break;
+					case 1: // 全方位弾発射
+						boss.timer--;
+						if (boss.timer == 30) {
+							for (int i = 0; i < 12; i++) {
+								float ang = i * (2.0f * kPi / 12.0f);
+								FireAngle(ebullets, bcx, bcy, ang, 5.5f, 10.0f);
+							}
+						}
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
+						break;
+					case 2: // 高速魔法弾の連続投射
+						boss.timer--;
+						if (boss.timer % 10 == 0) {
+							FireAngle(ebullets, bcx, bcy, aim, 8.0f, 12.0f);
+						}
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 80; }
+						break;
+					case 3: // 画面中央へワープして全方位バースト
+						boss.timer--;
+						if (boss.timer == 30) {
+							boss.x = kScreenW * 0.5f - boss.w * 0.5f;
+							shake = 10;
+							for (int i = 0; i < 16; i++) {
+								float ang = i * (2.0f * kPi / 16.0f);
+								FireAngle(ebullets, bcx, bcy, ang, 6.0f, 8.0f);
+							}
+						}
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
+						break;
+					case 4: // 怯み
+						boss.timer--;
+						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+						break;
 					}
-					break;
-				}
-				case kBStun: {
-					boss.timer--;
-					if (boss.timer <= 0) {
-						boss.state = kBWalk;
-						boss.timer = 60;
+					// ウィザードは地面にめり込まないように調整
+					if (boss.type == 2 && boss.state != 3) {
+						boss.y = Clamp(boss.y, 200.0f, groundY - boss.h);
 					}
-					break;
 				}
-				}
+
 				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
 
-				// ボスの弾の更新と当たり判定
+				// ボスの弾の更新とパリィ・被弾判定
 				for (int i = 0; i < kMaxEBullets; i++) {
 					EBullet& b = ebullets[i];
 					if (!b.active) continue;
@@ -709,7 +708,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						b.active = false;
 						continue;
 					}
-					// パリィで跳ね返された弾はボスにダメージを与える
 					if (b.reflected) {
 						if (HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
 							b.active = false;
@@ -720,12 +718,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						continue;
 					}
 					if (player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
-						// パリィ成功
 						if (b.wave) {
-							b.active = false; // 衝撃波は消せる
+							b.active = false;
 						}
 						else {
-							b.reflected = true; // 弾はボスへ跳ね返す
+							b.reflected = true;
 							float ang = atan2f(bcy - b.y, bcx - b.x);
 							b.vx = cosf(ang) * 14.0f;
 							b.vy = sinf(ang) * 14.0f;
@@ -745,15 +742,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				// ボス本体との当たり判定
 				if (HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
-
 					if (player.parryTimer > 0) {
-						// ボス本体へのパリィ
-						if (boss.state != kBAir) {
-							boss.state = kBStun;
-							boss.timer = 70;
-							boss.flash = 8;
-						}
-
+						boss.state = 4; // 怯みステート
+						boss.timer = 70;
+						boss.flash = 8;
 						player.invincible = 30;
 						player.parryCooldown = 0;
 						player.parryFlash = 10;
@@ -762,17 +754,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						shake = 10;
 					}
 					else if (player.invincible == 0 && player.dashTimer == 0) {
-						// ボスに接触するとダメージ
 						HurtPlayer(player);
 					}
 				}
 			}
 
-			// ----- 勝敗判定 -----
 			if (boss.hp <= 0) {
 				boss.hp = 0;
 				for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
-				if (bestFrames == 0 || playFrames < bestFrames) bestFrames = playFrames;
+				if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
+					bestFrames[currentStage] = playFrames;
+				}
 				scene = kVictory;
 			}
 			else if (player.hp <= 0) {
@@ -781,15 +773,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 
-		///
-		/// ↑更新処理ここまで
-		///
-
-		///
-		/// ↓描画処理ここから
-		///
-
-		// 画面シェイク
+		// ==========================================
+		// 描画処理
+		// ==========================================
 		if (shake > 0) {
 			gShakeX = (rand() % 11) - 5;
 			gShakeY = (rand() % 11) - 5;
@@ -798,50 +784,55 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			gShakeX = gShakeY = 0;
 		}
 
-		// 背景
 		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 
-		// 足場
 		for (int i = 0; i < kPlatformNum; i++) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
 			Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
 		}
 
-		if (scene != kTitle) {
-			int phase = BossPhase(boss);
+		if (scene == kPlay) {
+			// ステージごとにボスの見た目（色や形状）を大きく変更
+			unsigned int bodyColor = 0;
+			if (boss.type == 0) bodyColor = 0x33CC99FF; // ステージ1: スナイパー (緑系)
+			else if (boss.type == 1) bodyColor = 0xCC4433FF; // ステージ2: クラッシャー (赤系)
+			else bodyColor = 0x9933CCFF; // ステージ3: ウィザード (紫系)
 
-			// 突進の予告ライン
-			if (boss.state == kBChargeWind && (boss.timer / 4) % 2 == 0) {
-				float lx = (boss.dir == 1) ? boss.x + boss.w : 0.0f;
-				float lw = (boss.dir == 1) ? kScreenW - lx : boss.x;
-				Rect(lx, groundY - 60.0f, lw, 60.0f, 0xFF000040);
-			}
-
-			// ボス
-			unsigned int bodyColor = (phase == 1) ? 0x8844CCFF : (phase == 2 ? 0xE08830FF : 0xE03030FF);
 			if (boss.flash > 0) bodyColor = 0xFFFFFFFF;
-			if (boss.state == kBStun && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
+			if (boss.state == 4 && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
+
 			float drawH = boss.h;
 			float drawY = boss.y;
-			if (boss.state == kBJumpWind) { // 溜めで縮む
+			if (boss.type == 1 && boss.state == 2) { // クラッシャーの溜めで縮む
 				drawH = boss.h - 30.0f;
 				drawY = boss.y + 30.0f;
 			}
-			bool warnBlink = (boss.state == kBChargeWind || boss.state == kBBurst) && (boss.timer / 4) % 2 == 0;
-			if (warnBlink && boss.flash == 0) bodyColor = 0xFFFF66FF;
+
 			Rect(boss.x, drawY, boss.w, drawH, bodyColor);
-			// 目
+
+			// ボスの目（種類ごとに位置や形をアレンジ）
 			float eyeY = drawY + 40.0f;
 			float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
 			Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
 			Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
 			Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
 			Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
-			// ツノ
-			Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
-			Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
 
-			// ボスの弾
+			// ボスの頭部装飾（ボスタイプで変更）
+			if (boss.type == 0) {
+				// スナイパーの照準アンテナ
+				Rect(boss.x + boss.w * 0.5f - 5.0f, drawY - 30.0f, 10.0f, 30.0f, 0xCCCCCCFF);
+			}
+			else if (boss.type == 1) {
+				// クラッシャーの角
+				Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+				Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+			}
+			else {
+				// ウィザードのとんがり帽子風
+				Rect(boss.x + boss.w * 0.5f - 15.0f, drawY - 35.0f, 30.0f, 35.0f, 0xDD99FFFF);
+			}
+
 			for (int i = 0; i < kMaxEBullets; i++) {
 				const EBullet& b = ebullets[i];
 				if (!b.active) continue;
@@ -853,65 +844,56 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Rect(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, 0xFF8800FF);
 				}
 				else {
-					Circle(b.x, b.y, b.r, 0xFF4488FF);
+					Circle(b.x, b.y, b.r, boss.type == 0 ? 0x00FF88FF : (boss.type == 1 ? 0xFF8800FF : 0xFF44FFFF));
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 			}
 
-			// プレイヤーの弾
 			for (int i = 0; i < kMaxBullets; i++) {
 				if (!bullets[i].active) continue;
 				Rect(bullets[i].x, bullets[i].y, 16.0f, 8.0f, 0xFFE94AFF);
 			}
 
-			// プレイヤー(無敵中は点滅)
-			if (scene == kPlay) {
-				// ダッシュの残像
-				if (player.dashTimer > 0) {
-					for (int i = 1; i <= 3; i++) {
-						Rect(player.x - player.dashDir * i * 18.0f, player.y, player.w, player.h, 0x4AA8FF40);
-					}
+			if (player.dashTimer > 0) {
+				for (int i = 1; i <= 3; i++) {
+					Rect(player.x - player.dashDir * i * 18.0f, player.y, player.w, player.h, 0x4AA8FF40);
 				}
-				// 本体(無敵中は点滅、ダッシュ中は半透明)
-				if (!(player.invincible > 0 && (player.invincible / 4) % 2 == 0)) {
-					Rect(player.x, player.y, player.w, player.h, (player.dashTimer > 0) ? 0x4AA8FF99 : 0x4AA8FFFF);
-					float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
-					Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
-				}
-				// 近接攻撃のエフェクト(判定が出ている間)
-				if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
-					float sx, sy, sw, sh;
-					MeleeBox(player, &sx, &sy, &sw, &sh);
-					bool fin = player.atkAir && player.atkStep == 4;
-					Rect(sx, sy, sw, sh, fin ? 0xFFAA44A0 : (player.atkAir ? 0xFFFFFFA0 : 0xFFE060A0));
-					// 刃の芯
-					float cy = sy + sh * 0.5f;
-					Rect(sx, cy - 3.0f, sw, 6.0f, 0xFFFFFFFF);
-				}
-				// 空中コンボ表示
-				if (player.atkAir && player.atkStep > 0 && (player.atkTimer > 0 || player.comboWindow > 0)) {
-					GetFont().Printf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 30, "AIR %d/4", player.atkStep);
-				}
-				// パリィのシールド
-				float pcx2 = player.x + player.w * 0.5f;
-				float pcy2 = player.y + player.h * 0.5f;
-				if (player.parryTimer > 0) {
-					Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
-				}
-				if (player.parryFlash > 0) {
-					Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
-				}
+			}
+			if (!(player.invincible > 0 && (player.invincible / 4) % 2 == 0)) {
+				Rect(player.x, player.y, player.w, player.h, (player.dashTimer > 0) ? 0x4AA8FF99 : 0x4AA8FFFF);
+				float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
+				Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
+			}
+
+			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
+				float sx, sy, sw, sh;
+				MeleeBox(player, &sx, &sy, &sw, &sh);
+				bool fin = player.atkAir && player.atkStep == 4;
+				Rect(sx, sy, sw, sh, fin ? 0xFFAA44A0 : (player.atkAir ? 0xFFFFFFA0 : 0xFFE060A0));
+				float cy = sy + sh * 0.5f;
+				Rect(sx, cy - 3.0f, sw, 6.0f, 0xFFFFFFFF);
+			}
+
+			if (player.atkAir && player.atkStep > 0 && (player.atkTimer > 0 || player.comboWindow > 0)) {
+				GetFont().Printf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 30, "AIR %d/4", player.atkStep);
+			}
+
+			float pcx2 = player.x + player.w * 0.5f;
+			float pcy2 = player.y + player.h * 0.5f;
+			if (player.parryTimer > 0) {
+				Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
+			}
+			if (player.parryFlash > 0) {
+				Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
 			}
 
 			// ---- HUD ----
-			// (フォントが24pxなので、元の ScreenPrintf より行の間隔を広げてある)
 			GetFont().Printf(20, 10, "PLAYER");
 			for (int i = 0; i < kPlayerMaxHp; i++) {
 				Novice::DrawBox(20 + i * 26, 42, 20, 14, 0.0f, (i < player.hp) ? 0xFF5577FF : 0x55555588, kFillModeSolid);
 			}
 			GetFont().Printf(20, 62, "TIME: %.1f", playFrames / 60.0f);
 
-			// ダッシュ/パリィの使用可能表示
 			bool dashReady = player.dashCooldown == 0 && (player.onGround || player.airDashLeft > 0);
 			bool parryReady = player.parryCooldown == 0;
 			Novice::DrawBox(20, 96, 70, 26, 0.0f, dashReady ? 0x44DD66FF : 0x55555588, kFillModeSolid);
@@ -919,71 +901,75 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Novice::DrawBox(100, 96, 80, 26, 0.0f, parryReady ? 0x44CCFFFF : 0x55555588, kFillModeSolid);
 			GetFont().Printf(106, 96, "PARRY");
 
-			// ボスHPバー
-			GetFont().Printf(440, 6, "BOSS  PHASE %d", phase);
+			const char* bossNames[3] = { "SNIPER BOSS", "CRUSHER BOSS", "WIZARD BOSS" };
+			GetFont().Printf(440, 6, "STAGE %d : %s", currentStage + 1, bossNames[currentStage]);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
-			Novice::DrawBox(440, 36, 400 * boss.hp / kBossMaxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
+			Novice::DrawBox(440, 36, 400 * boss.hp / boss.maxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0xFFFFFFFF, kFillModeWireFrame);
 
-			// 登場演出
-			if (scene == kPlay && introTimer > 0) {
+			if (introTimer > 0) {
 				if ((introTimer / 10) % 2 == 0) {
 					GetFont().Printf(570, 250, "!! WARNING !!");
 				}
-				GetFont().Printf(560, 284, "A BOSS APPEARS");
+				GetFont().Printf(480, 284, "%s APPEARS", bossNames[currentStage]);
 			}
 		}
 
 		if (scene == kTitle) {
-			GetFont().Printf(526, 30, "=== BOSS BATTLE ===");
-			GetFont().Printf(420, 80, "Move : A / D  or  Left / Right");
-			GetFont().Printf(420, 108, "Jump : SPACE / W / Up");
-			GetFont().Printf(420, 136, "Shot : J / Z / K  (1 damage)");
-			GetFont().Printf(420, 164, "Avoid touching the boss!");
-			GetFont().Printf(420, 208, "Double Jump : press jump again in the air");
-			GetFont().Printf(420, 236, "Dash  : L / LSHIFT / C  (air OK, 1 per air, i-frames)");
-			GetFont().Printf(420, 264, "Parry : I / X  (reflect bullets = 4 damage!)");
-			GetFont().Printf(420, 292, "        Parry the boss's body = stun");
-			GetFont().Printf(420, 320, "        Ground shockwaves are destroyed.");
-			GetFont().Printf(420, 364, "Melee : U / V");
-			GetFont().Printf(420, 392, "  Ground : lunging heavy slash (3 dmg)");
-			GetFont().Printf(420, 420, "  Air    : hit to chain up to 4, you float while combo-ing");
-			GetFont().Printf(420, 448, "           2 / 2 / 2 / 4 dmg, landing ends the combo");
+			GetFont().Printf(490, 150, "=== BOSS BATTLE ===");
 			if ((frame / 30) % 2 == 0) {
-				GetFont().Printf(520, 590, "PRESS SPACE TO START");
+				GetFont().Printf(520, 360, "PRESS SPACE TO START");
 			}
-			if (bestFrames > 0) {
-				GetFont().Printf(520, 630, "BEST TIME: %.1f sec", bestFrames / 60.0f);
+		}
+		else if (scene == kStageSelect) {
+			GetFont().Printf(490, 80, "=== STAGE SELECT ===");
+			GetFont().Printf(430, 120, "Use A / D or Left / Right to select, SPACE to start");
+
+			const char* stageNames[kTotalStages] = { "STAGE 1", "STAGE 2", "STAGE 3" };
+			const char* bossTypes[kTotalStages] = { "Sniper Type", "Crusher Type", "Wizard Type" };
+
+			for (int i = 0; i < kTotalStages; i++) {
+				bool isSelected = (i == selectedStage);
+				unsigned int boxColor = isSelected ? 0x336699FF : 0x222233FF;
+				unsigned int frameColor = isSelected ? 0xFFFFFFFF : 0x888888FF;
+
+				int boxX = 390 + i * 170;
+				int boxY = 220;
+				Novice::DrawBox(boxX, boxY, 150, 210, 0.0f, boxColor, kFillModeSolid);
+				Novice::DrawBox(boxX, boxY, 150, 210, 0.0f, frameColor, kFillModeWireFrame);
+
+				GetFont().Printf(boxX + 25, boxY + 25, "%s", stageNames[i]);
+				GetFont().Printf(boxX + 15, boxY + 65, "%s", bossTypes[i]);
+
+				if (isSelected) {
+					GetFont().Printf(boxX + 45, boxY + 160, "^^ SELECT");
+				}
 			}
+			GetFont().Printf(420, 480, "STAGE 1 : Sniper (Precise shots & spread bullets)");
+			GetFont().Printf(420, 510, "STAGE 2 : Crusher (High-speed charge & shockwaves)");
+			GetFont().Printf(420, 540, "STAGE 3 : Wizard (Omnidirectional magic & teleport)");
 		}
 		else if (scene == kGameOver) {
 			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
 			GetFont().Printf(580, 270, "YOU DIED");
-			GetFont().Printf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, kBossMaxHp);
-			GetFont().Printf(520, 390, "PRESS SPACE TO RETRY");
+			GetFont().Printf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, boss.maxHp);
+			GetFont().Printf(500, 390, "PRESS SPACE TO RETURN TO SELECT");
 		}
 		else if (scene == kVictory) {
 			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
-			GetFont().Printf(570, 270, "BOSS DEFEATED!");
+			GetFont().Printf(570, 270, "STAGE CLEAR!");
 			GetFont().Printf(560, 310, "TIME: %.1f sec", playFrames / 60.0f);
-			GetFont().Printf(550, 344, "BEST: %.1f sec", bestFrames / 60.0f);
-			GetFont().Printf(520, 390, "PRESS SPACE TO PLAY AGAIN");
+			GetFont().Printf(550, 344, "BEST: %.1f sec", bestFrames[currentStage] / 60.0f);
+			GetFont().Printf(500, 390, "PRESS SPACE TO RETURN TO SELECT");
 		}
 
-		///
-		/// ↑描画処理ここまで
-		///
-
-		// フレームの終了
 		Novice::EndFrame();
 
-		// ESCキーが押されたらループを抜ける
 		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
 			break;
 		}
 	}
 
-	// ライブラリの終了
 	Novice::Finalize();
 	return 0;
 }
