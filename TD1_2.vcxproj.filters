@@ -103,5 +103,8 @@
     <ClInclude Include="C:\KamataEngine\DirectXGame\2d\ImGuiManager.h">
       <Filter>KamataEngine\Include</Filter>
     </ClInclude>
+    <ClInclude Include="FontRenderer.h">
+      <Filter>KamataEngine\Adapter</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

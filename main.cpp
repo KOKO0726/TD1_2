@@ -4,6 +4,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "FontRenderer.h"
+
 const char kWindowTitle[] = "LC1B_05_ウエノユウタ";
 
 // ==================================================
@@ -277,6 +279,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, kScreenW, kScreenH);
+
+	// フォントの初期化(Novice::Initialize の後に1回だけ)
+	// EnkaDotMincho24.ttf は exe を実行するフォルダ(プロジェクトフォルダ)に置くこと
+	// 画面に出す文字は半角英数字だけなので、追加の漢字は不要
+	GetFont().Create(L"PixelMplus12-Bold.ttf", L"PixelMplus12", 28);
 
 	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
@@ -888,7 +895,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 				// 空中コンボ表示
 				if (player.atkAir && player.atkStep > 0 && (player.atkTimer > 0 || player.comboWindow > 0)) {
-					Novice::ScreenPrintf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 24, "AIR %d/4", player.atkStep);
+					GetFont().Printf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 30, "AIR %d/4", player.atkStep);
 				}
 				// パリィのシールド
 				float pcx2 = player.x + player.w * 0.5f;
@@ -902,22 +909,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 
 			// ---- HUD ----
-			Novice::ScreenPrintf(20, 20, "PLAYER");
+			// (フォントが24pxなので、元の ScreenPrintf より行の間隔を広げてある)
+			GetFont().Printf(20, 10, "PLAYER");
 			for (int i = 0; i < kPlayerMaxHp; i++) {
 				Novice::DrawBox(20 + i * 26, 42, 20, 14, 0.0f, (i < player.hp) ? 0xFF5577FF : 0x55555588, kFillModeSolid);
 			}
-			Novice::ScreenPrintf(20, 66, "TIME: %.1f", playFrames / 60.0f);
+			GetFont().Printf(20, 62, "TIME: %.1f", playFrames / 60.0f);
 
 			// ダッシュ/パリィの使用可能表示
 			bool dashReady = player.dashCooldown == 0 && (player.onGround || player.airDashLeft > 0);
 			bool parryReady = player.parryCooldown == 0;
-			Novice::DrawBox(20, 90, 60, 16, 0.0f, dashReady ? 0x44DD66FF : 0x55555588, kFillModeSolid);
-			Novice::ScreenPrintf(26, 90, "DASH");
-			Novice::DrawBox(90, 90, 60, 16, 0.0f, parryReady ? 0x44CCFFFF : 0x55555588, kFillModeSolid);
-			Novice::ScreenPrintf(94, 90, "PARRY");
+			Novice::DrawBox(20, 96, 70, 26, 0.0f, dashReady ? 0x44DD66FF : 0x55555588, kFillModeSolid);
+			GetFont().Printf(26, 96, "DASH");
+			Novice::DrawBox(100, 96, 80, 26, 0.0f, parryReady ? 0x44CCFFFF : 0x55555588, kFillModeSolid);
+			GetFont().Printf(106, 96, "PARRY");
 
 			// ボスHPバー
-			Novice::ScreenPrintf(440, 14, "BOSS  PHASE %d", phase);
+			GetFont().Printf(440, 6, "BOSS  PHASE %d", phase);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400 * boss.hp / kBossMaxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0xFFFFFFFF, kFillModeWireFrame);
@@ -925,46 +933,46 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 登場演出
 			if (scene == kPlay && introTimer > 0) {
 				if ((introTimer / 10) % 2 == 0) {
-					Novice::ScreenPrintf(570, 250, "!! WARNING !!");
+					GetFont().Printf(570, 250, "!! WARNING !!");
 				}
-				Novice::ScreenPrintf(560, 280, "A BOSS APPEARS");
+				GetFont().Printf(560, 284, "A BOSS APPEARS");
 			}
 		}
 
 		if (scene == kTitle) {
-			Novice::ScreenPrintf(560, 200, "=== BOSS BATTLE ===");
-			Novice::ScreenPrintf(500, 270, "Move : A / D  or  Left / Right");
-			Novice::ScreenPrintf(500, 290, "Jump : SPACE / W / Up");
-			Novice::ScreenPrintf(500, 310, "Shot : J / Z / K  (1 damage)");
-			Novice::ScreenPrintf(500, 330, "Stomp the boss's head : 3 damage!");
-			Novice::ScreenPrintf(500, 370, "Double Jump : press jump again in the air");
-			Novice::ScreenPrintf(500, 390, "Dash  : L / LSHIFT / C  (air OK, 1 per air, i-frames)");
-			Novice::ScreenPrintf(500, 410, "Parry : I / X  (reflect bullets = 4 damage!)");
-			Novice::ScreenPrintf(500, 430, "        Parry the boss's body = stun");
-			Novice::ScreenPrintf(500, 450, "        Ground shockwaves are destroyed.");
-			Novice::ScreenPrintf(500, 480, "Melee : U / V");
-			Novice::ScreenPrintf(500, 500, "  Ground : lunging heavy slash (3 dmg)");
-			Novice::ScreenPrintf(500, 520, "  Air    : hit to chain up to 4, you float while combo-ing");
-			Novice::ScreenPrintf(500, 540, "           2 / 2 / 2 / 4 dmg, landing ends the combo");
+			GetFont().Printf(526, 30, "=== BOSS BATTLE ===");
+			GetFont().Printf(420, 80, "Move : A / D  or  Left / Right");
+			GetFont().Printf(420, 108, "Jump : SPACE / W / Up");
+			GetFont().Printf(420, 136, "Shot : J / Z / K  (1 damage)");
+			GetFont().Printf(420, 164, "Stomp the boss's head : 3 damage!");
+			GetFont().Printf(420, 208, "Double Jump : press jump again in the air");
+			GetFont().Printf(420, 236, "Dash  : L / LSHIFT / C  (air OK, 1 per air, i-frames)");
+			GetFont().Printf(420, 264, "Parry : I / X  (reflect bullets = 4 damage!)");
+			GetFont().Printf(420, 292, "        Parry the boss's body = stun");
+			GetFont().Printf(420, 320, "        Ground shockwaves are destroyed.");
+			GetFont().Printf(420, 364, "Melee : U / V");
+			GetFont().Printf(420, 392, "  Ground : lunging heavy slash (3 dmg)");
+			GetFont().Printf(420, 420, "  Air    : hit to chain up to 4, you float while combo-ing");
+			GetFont().Printf(420, 448, "           2 / 2 / 2 / 4 dmg, landing ends the combo");
 			if ((frame / 30) % 2 == 0) {
-				Novice::ScreenPrintf(550, 590, "PRESS SPACE TO START");
+				GetFont().Printf(520, 590, "PRESS SPACE TO START");
 			}
 			if (bestFrames > 0) {
-				Novice::ScreenPrintf(550, 630, "BEST TIME: %.1f sec", bestFrames / 60.0f);
+				GetFont().Printf(520, 630, "BEST TIME: %.1f sec", bestFrames / 60.0f);
 			}
 		}
 		else if (scene == kGameOver) {
 			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
-			Novice::ScreenPrintf(580, 270, "YOU DIED");
-			Novice::ScreenPrintf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, kBossMaxHp);
-			Novice::ScreenPrintf(520, 390, "PRESS SPACE TO RETRY");
+			GetFont().Printf(580, 270, "YOU DIED");
+			GetFont().Printf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, kBossMaxHp);
+			GetFont().Printf(520, 390, "PRESS SPACE TO RETRY");
 		}
 		else if (scene == kVictory) {
 			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
-			Novice::ScreenPrintf(570, 270, "BOSS DEFEATED!");
-			Novice::ScreenPrintf(560, 310, "TIME: %.1f sec", playFrames / 60.0f);
-			Novice::ScreenPrintf(550, 340, "BEST: %.1f sec", bestFrames / 60.0f);
-			Novice::ScreenPrintf(520, 390, "PRESS SPACE TO PLAY AGAIN");
+			GetFont().Printf(570, 270, "BOSS DEFEATED!");
+			GetFont().Printf(560, 310, "TIME: %.1f sec", playFrames / 60.0f);
+			GetFont().Printf(550, 344, "BEST: %.1f sec", bestFrames / 60.0f);
+			GetFont().Printf(520, 390, "PRESS SPACE TO PLAY AGAIN");
 		}
 
 		///
