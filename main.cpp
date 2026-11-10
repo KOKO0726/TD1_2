@@ -745,21 +745,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				// ボス本体との当たり判定
 				if (HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
-					bool stomp = player.vy > 0.0f && (player.y + player.h) < (boss.y + 50.0f);
-					if (stomp) {
-						boss.hp -= 3;
-						boss.flash = 8;
-						player.y = boss.y - player.h - 1.0f;
-						player.vy = -16.0f;
-						shake = 8;
-					}
-					else if (player.parryTimer > 0) {
-						// ボス本体へのパリィ:空中以外なら怯ませる
+
+					if (player.parryTimer > 0) {
+						// ボス本体へのパリィ
 						if (boss.state != kBAir) {
 							boss.state = kBStun;
 							boss.timer = 70;
 							boss.flash = 8;
 						}
+
 						player.invincible = 30;
 						player.parryCooldown = 0;
 						player.parryFlash = 10;
@@ -768,226 +762,226 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						shake = 10;
 					}
 					else if (player.invincible == 0 && player.dashTimer == 0) {
+						// ボスに接触するとダメージ
 						HurtPlayer(player);
 					}
 				}
-			}
 
-			// ----- 勝敗判定 -----
-			if (boss.hp <= 0) {
-				boss.hp = 0;
-				for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
-				if (bestFrames == 0 || playFrames < bestFrames) bestFrames = playFrames;
-				scene = kVictory;
-			}
-			else if (player.hp <= 0) {
-				player.hp = 0;
-				scene = kGameOver;
-			}
-		}
-
-		///
-		/// ↑更新処理ここまで
-		///
-
-		///
-		/// ↓描画処理ここから
-		///
-
-		// 画面シェイク
-		if (shake > 0) {
-			gShakeX = (rand() % 11) - 5;
-			gShakeY = (rand() % 11) - 5;
-		}
-		else {
-			gShakeX = gShakeY = 0;
-		}
-
-		// 背景
-		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
-
-		// 足場
-		for (int i = 0; i < kPlatformNum; i++) {
-			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
-			Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
-		}
-
-		if (scene != kTitle) {
-			int phase = BossPhase(boss);
-
-			// 突進の予告ライン
-			if (boss.state == kBChargeWind && (boss.timer / 4) % 2 == 0) {
-				float lx = (boss.dir == 1) ? boss.x + boss.w : 0.0f;
-				float lw = (boss.dir == 1) ? kScreenW - lx : boss.x;
-				Rect(lx, groundY - 60.0f, lw, 60.0f, 0xFF000040);
-			}
-
-			// ボス
-			unsigned int bodyColor = (phase == 1) ? 0x8844CCFF : (phase == 2 ? 0xE08830FF : 0xE03030FF);
-			if (boss.flash > 0) bodyColor = 0xFFFFFFFF;
-			if (boss.state == kBStun && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
-			float drawH = boss.h;
-			float drawY = boss.y;
-			if (boss.state == kBJumpWind) { // 溜めで縮む
-				drawH = boss.h - 30.0f;
-				drawY = boss.y + 30.0f;
-			}
-			bool warnBlink = (boss.state == kBChargeWind || boss.state == kBBurst) && (boss.timer / 4) % 2 == 0;
-			if (warnBlink && boss.flash == 0) bodyColor = 0xFFFF66FF;
-			Rect(boss.x, drawY, boss.w, drawH, bodyColor);
-			// 目
-			float eyeY = drawY + 40.0f;
-			float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
-			Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-			Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-			Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
-			Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
-			// ツノ
-			Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
-			Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
-
-			// ボスの弾
-			for (int i = 0; i < kMaxEBullets; i++) {
-				const EBullet& b = ebullets[i];
-				if (!b.active) continue;
-				if (b.reflected) {
-					Circle(b.x, b.y, b.r, 0x66FFFFFF);
-					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
+				// ----- 勝敗判定 -----
+				if (boss.hp <= 0) {
+					boss.hp = 0;
+					for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
+					if (bestFrames == 0 || playFrames < bestFrames) bestFrames = playFrames;
+					scene = kVictory;
 				}
-				else if (b.wave) {
-					Rect(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, 0xFF8800FF);
-				}
-				else {
-					Circle(b.x, b.y, b.r, 0xFF4488FF);
-					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
+				else if (player.hp <= 0) {
+					player.hp = 0;
+					scene = kGameOver;
 				}
 			}
 
-			// プレイヤーの弾
-			for (int i = 0; i < kMaxBullets; i++) {
-				if (!bullets[i].active) continue;
-				Rect(bullets[i].x, bullets[i].y, 16.0f, 8.0f, 0xFFE94AFF);
+			///
+			/// ↑更新処理ここまで
+			///
+
+			///
+			/// ↓描画処理ここから
+			///
+
+			// 画面シェイク
+			if (shake > 0) {
+				gShakeX = (rand() % 11) - 5;
+				gShakeY = (rand() % 11) - 5;
+			}
+			else {
+				gShakeX = gShakeY = 0;
 			}
 
-			// プレイヤー(無敵中は点滅)
-			if (scene == kPlay) {
-				// ダッシュの残像
-				if (player.dashTimer > 0) {
-					for (int i = 1; i <= 3; i++) {
-						Rect(player.x - player.dashDir * i * 18.0f, player.y, player.w, player.h, 0x4AA8FF40);
+			// 背景
+			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
+
+			// 足場
+			for (int i = 0; i < kPlatformNum; i++) {
+				float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
+				Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
+			}
+
+			if (scene != kTitle) {
+				int phase = BossPhase(boss);
+
+				// 突進の予告ライン
+				if (boss.state == kBChargeWind && (boss.timer / 4) % 2 == 0) {
+					float lx = (boss.dir == 1) ? boss.x + boss.w : 0.0f;
+					float lw = (boss.dir == 1) ? kScreenW - lx : boss.x;
+					Rect(lx, groundY - 60.0f, lw, 60.0f, 0xFF000040);
+				}
+
+				// ボス
+				unsigned int bodyColor = (phase == 1) ? 0x8844CCFF : (phase == 2 ? 0xE08830FF : 0xE03030FF);
+				if (boss.flash > 0) bodyColor = 0xFFFFFFFF;
+				if (boss.state == kBStun && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
+				float drawH = boss.h;
+				float drawY = boss.y;
+				if (boss.state == kBJumpWind) { // 溜めで縮む
+					drawH = boss.h - 30.0f;
+					drawY = boss.y + 30.0f;
+				}
+				bool warnBlink = (boss.state == kBChargeWind || boss.state == kBBurst) && (boss.timer / 4) % 2 == 0;
+				if (warnBlink && boss.flash == 0) bodyColor = 0xFFFF66FF;
+				Rect(boss.x, drawY, boss.w, drawH, bodyColor);
+				// 目
+				float eyeY = drawY + 40.0f;
+				float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
+				Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+				Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+				Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+				Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+				// ツノ
+				Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+				Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+
+				// ボスの弾
+				for (int i = 0; i < kMaxEBullets; i++) {
+					const EBullet& b = ebullets[i];
+					if (!b.active) continue;
+					if (b.reflected) {
+						Circle(b.x, b.y, b.r, 0x66FFFFFF);
+						Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
+					}
+					else if (b.wave) {
+						Rect(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, 0xFF8800FF);
+					}
+					else {
+						Circle(b.x, b.y, b.r, 0xFF4488FF);
+						Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 					}
 				}
-				// 本体(無敵中は点滅、ダッシュ中は半透明)
-				if (!(player.invincible > 0 && (player.invincible / 4) % 2 == 0)) {
-					Rect(player.x, player.y, player.w, player.h, (player.dashTimer > 0) ? 0x4AA8FF99 : 0x4AA8FFFF);
-					float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
-					Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
+
+				// プレイヤーの弾
+				for (int i = 0; i < kMaxBullets; i++) {
+					if (!bullets[i].active) continue;
+					Rect(bullets[i].x, bullets[i].y, 16.0f, 8.0f, 0xFFE94AFF);
 				}
-				// 近接攻撃のエフェクト(判定が出ている間)
-				if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
-					float sx, sy, sw, sh;
-					MeleeBox(player, &sx, &sy, &sw, &sh);
-					bool fin = player.atkAir && player.atkStep == 4;
-					Rect(sx, sy, sw, sh, fin ? 0xFFAA44A0 : (player.atkAir ? 0xFFFFFFA0 : 0xFFE060A0));
-					// 刃の芯
-					float cy = sy + sh * 0.5f;
-					Rect(sx, cy - 3.0f, sw, 6.0f, 0xFFFFFFFF);
+
+				// プレイヤー(無敵中は点滅)
+				if (scene == kPlay) {
+					// ダッシュの残像
+					if (player.dashTimer > 0) {
+						for (int i = 1; i <= 3; i++) {
+							Rect(player.x - player.dashDir * i * 18.0f, player.y, player.w, player.h, 0x4AA8FF40);
+						}
+					}
+					// 本体(無敵中は点滅、ダッシュ中は半透明)
+					if (!(player.invincible > 0 && (player.invincible / 4) % 2 == 0)) {
+						Rect(player.x, player.y, player.w, player.h, (player.dashTimer > 0) ? 0x4AA8FF99 : 0x4AA8FFFF);
+						float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
+						Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
+					}
+					// 近接攻撃のエフェクト(判定が出ている間)
+					if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
+						float sx, sy, sw, sh;
+						MeleeBox(player, &sx, &sy, &sw, &sh);
+						bool fin = player.atkAir && player.atkStep == 4;
+						Rect(sx, sy, sw, sh, fin ? 0xFFAA44A0 : (player.atkAir ? 0xFFFFFFA0 : 0xFFE060A0));
+						// 刃の芯
+						float cy = sy + sh * 0.5f;
+						Rect(sx, cy - 3.0f, sw, 6.0f, 0xFFFFFFFF);
+					}
+					// 空中コンボ表示
+					if (player.atkAir && player.atkStep > 0 && (player.atkTimer > 0 || player.comboWindow > 0)) {
+						GetFont().Printf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 30, "AIR %d/4", player.atkStep);
+					}
+					// パリィのシールド
+					float pcx2 = player.x + player.w * 0.5f;
+					float pcy2 = player.y + player.h * 0.5f;
+					if (player.parryTimer > 0) {
+						Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
+					}
+					if (player.parryFlash > 0) {
+						Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
+					}
 				}
-				// 空中コンボ表示
-				if (player.atkAir && player.atkStep > 0 && (player.atkTimer > 0 || player.comboWindow > 0)) {
-					GetFont().Printf(static_cast<int>(player.x) - 10, static_cast<int>(player.y) - 30, "AIR %d/4", player.atkStep);
+
+				// ---- HUD ----
+				// (フォントが24pxなので、元の ScreenPrintf より行の間隔を広げてある)
+				GetFont().Printf(20, 10, "PLAYER");
+				for (int i = 0; i < kPlayerMaxHp; i++) {
+					Novice::DrawBox(20 + i * 26, 42, 20, 14, 0.0f, (i < player.hp) ? 0xFF5577FF : 0x55555588, kFillModeSolid);
 				}
-				// パリィのシールド
-				float pcx2 = player.x + player.w * 0.5f;
-				float pcy2 = player.y + player.h * 0.5f;
-				if (player.parryTimer > 0) {
-					Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
-				}
-				if (player.parryFlash > 0) {
-					Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
+				GetFont().Printf(20, 62, "TIME: %.1f", playFrames / 60.0f);
+
+				// ダッシュ/パリィの使用可能表示
+				bool dashReady = player.dashCooldown == 0 && (player.onGround || player.airDashLeft > 0);
+				bool parryReady = player.parryCooldown == 0;
+				Novice::DrawBox(20, 96, 70, 26, 0.0f, dashReady ? 0x44DD66FF : 0x55555588, kFillModeSolid);
+				GetFont().Printf(26, 96, "DASH");
+				Novice::DrawBox(100, 96, 80, 26, 0.0f, parryReady ? 0x44CCFFFF : 0x55555588, kFillModeSolid);
+				GetFont().Printf(106, 96, "PARRY");
+
+				// ボスHPバー
+				GetFont().Printf(440, 6, "BOSS  PHASE %d", phase);
+				Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
+				Novice::DrawBox(440, 36, 400 * boss.hp / kBossMaxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
+				Novice::DrawBox(440, 36, 400, 18, 0.0f, 0xFFFFFFFF, kFillModeWireFrame);
+
+				// 登場演出
+				if (scene == kPlay && introTimer > 0) {
+					if ((introTimer / 10) % 2 == 0) {
+						GetFont().Printf(570, 250, "!! WARNING !!");
+					}
+					GetFont().Printf(560, 284, "A BOSS APPEARS");
 				}
 			}
 
-			// ---- HUD ----
-			// (フォントが24pxなので、元の ScreenPrintf より行の間隔を広げてある)
-			GetFont().Printf(20, 10, "PLAYER");
-			for (int i = 0; i < kPlayerMaxHp; i++) {
-				Novice::DrawBox(20 + i * 26, 42, 20, 14, 0.0f, (i < player.hp) ? 0xFF5577FF : 0x55555588, kFillModeSolid);
-			}
-			GetFont().Printf(20, 62, "TIME: %.1f", playFrames / 60.0f);
-
-			// ダッシュ/パリィの使用可能表示
-			bool dashReady = player.dashCooldown == 0 && (player.onGround || player.airDashLeft > 0);
-			bool parryReady = player.parryCooldown == 0;
-			Novice::DrawBox(20, 96, 70, 26, 0.0f, dashReady ? 0x44DD66FF : 0x55555588, kFillModeSolid);
-			GetFont().Printf(26, 96, "DASH");
-			Novice::DrawBox(100, 96, 80, 26, 0.0f, parryReady ? 0x44CCFFFF : 0x55555588, kFillModeSolid);
-			GetFont().Printf(106, 96, "PARRY");
-
-			// ボスHPバー
-			GetFont().Printf(440, 6, "BOSS  PHASE %d", phase);
-			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
-			Novice::DrawBox(440, 36, 400 * boss.hp / kBossMaxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
-			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0xFFFFFFFF, kFillModeWireFrame);
-
-			// 登場演出
-			if (scene == kPlay && introTimer > 0) {
-				if ((introTimer / 10) % 2 == 0) {
-					GetFont().Printf(570, 250, "!! WARNING !!");
+			if (scene == kTitle) {
+				GetFont().Printf(526, 30, "=== BOSS BATTLE ===");
+				GetFont().Printf(420, 80, "Move : A / D  or  Left / Right");
+				GetFont().Printf(420, 108, "Jump : SPACE / W / Up");
+				GetFont().Printf(420, 136, "Shot : J / Z / K  (1 damage)");
+				GetFont().Printf(420, 164, "Avoid touching the boss!");
+				GetFont().Printf(420, 208, "Double Jump : press jump again in the air");
+				GetFont().Printf(420, 236, "Dash  : L / LSHIFT / C  (air OK, 1 per air, i-frames)");
+				GetFont().Printf(420, 264, "Parry : I / X  (reflect bullets = 4 damage!)");
+				GetFont().Printf(420, 292, "        Parry the boss's body = stun");
+				GetFont().Printf(420, 320, "        Ground shockwaves are destroyed.");
+				GetFont().Printf(420, 364, "Melee : U / V");
+				GetFont().Printf(420, 392, "  Ground : lunging heavy slash (3 dmg)");
+				GetFont().Printf(420, 420, "  Air    : hit to chain up to 4, you float while combo-ing");
+				GetFont().Printf(420, 448, "           2 / 2 / 2 / 4 dmg, landing ends the combo");
+				if ((frame / 30) % 2 == 0) {
+					GetFont().Printf(520, 590, "PRESS SPACE TO START");
 				}
-				GetFont().Printf(560, 284, "A BOSS APPEARS");
+				if (bestFrames > 0) {
+					GetFont().Printf(520, 630, "BEST TIME: %.1f sec", bestFrames / 60.0f);
+				}
 			}
-		}
-
-		if (scene == kTitle) {
-			GetFont().Printf(526, 30, "=== BOSS BATTLE ===");
-			GetFont().Printf(420, 80, "Move : A / D  or  Left / Right");
-			GetFont().Printf(420, 108, "Jump : SPACE / W / Up");
-			GetFont().Printf(420, 136, "Shot : J / Z / K  (1 damage)");
-			GetFont().Printf(420, 164, "Stomp the boss's head : 3 damage!");
-			GetFont().Printf(420, 208, "Double Jump : press jump again in the air");
-			GetFont().Printf(420, 236, "Dash  : L / LSHIFT / C  (air OK, 1 per air, i-frames)");
-			GetFont().Printf(420, 264, "Parry : I / X  (reflect bullets = 4 damage!)");
-			GetFont().Printf(420, 292, "        Parry the boss's body = stun");
-			GetFont().Printf(420, 320, "        Ground shockwaves are destroyed.");
-			GetFont().Printf(420, 364, "Melee : U / V");
-			GetFont().Printf(420, 392, "  Ground : lunging heavy slash (3 dmg)");
-			GetFont().Printf(420, 420, "  Air    : hit to chain up to 4, you float while combo-ing");
-			GetFont().Printf(420, 448, "           2 / 2 / 2 / 4 dmg, landing ends the combo");
-			if ((frame / 30) % 2 == 0) {
-				GetFont().Printf(520, 590, "PRESS SPACE TO START");
+			else if (scene == kGameOver) {
+				Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
+				GetFont().Printf(580, 270, "YOU DIED");
+				GetFont().Printf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, kBossMaxHp);
+				GetFont().Printf(520, 390, "PRESS SPACE TO RETRY");
 			}
-			if (bestFrames > 0) {
-				GetFont().Printf(520, 630, "BEST TIME: %.1f sec", bestFrames / 60.0f);
+			else if (scene == kVictory) {
+				Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
+				GetFont().Printf(570, 270, "BOSS DEFEATED!");
+				GetFont().Printf(560, 310, "TIME: %.1f sec", playFrames / 60.0f);
+				GetFont().Printf(550, 344, "BEST: %.1f sec", bestFrames / 60.0f);
+				GetFont().Printf(520, 390, "PRESS SPACE TO PLAY AGAIN");
 			}
-		}
-		else if (scene == kGameOver) {
-			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
-			GetFont().Printf(580, 270, "YOU DIED");
-			GetFont().Printf(540, 310, "BOSS HP LEFT: %d / %d", boss.hp, kBossMaxHp);
-			GetFont().Printf(520, 390, "PRESS SPACE TO RETRY");
-		}
-		else if (scene == kVictory) {
-			Novice::DrawBox(440, 240, 400, 200, 0.0f, 0x000000CC, kFillModeSolid);
-			GetFont().Printf(570, 270, "BOSS DEFEATED!");
-			GetFont().Printf(560, 310, "TIME: %.1f sec", playFrames / 60.0f);
-			GetFont().Printf(550, 344, "BEST: %.1f sec", bestFrames / 60.0f);
-			GetFont().Printf(520, 390, "PRESS SPACE TO PLAY AGAIN");
-		}
 
-		///
-		/// ↑描画処理ここまで
-		///
+			///
+			/// ↑描画処理ここまで
+			///
 
-		// フレームの終了
-		Novice::EndFrame();
+			// フレームの終了
+			Novice::EndFrame();
 
-		// ESCキーが押されたらループを抜ける
-		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
-			break;
+			// ESCキーが押されたらループを抜ける
+			if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+				break;
+			}
 		}
 	}
-
 	// ライブラリの終了
 	Novice::Finalize();
 	return 0;
