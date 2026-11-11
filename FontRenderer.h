@@ -4,126 +4,61 @@
 #include <Windows.h>
 #include <cstdarg>
 #include <cstdio>
-#include <fstream>
 #include <map>
-#include <set>
 #include <string>
-#include <vector>
 
+#include "FontAtlasData.h"
+
+// 文字画像(font_atlas.png)を切り出して文字を表示するクラス。
 class FontRenderer {
 public:
 	// Novice::Initialize の後に、1回だけ呼ぶこと
-	// faceName は ttf ファイル名ではなく「フォントのファミリー名」
-	// extraChars には、使う漢字などを書く(ASCII・ひらがな・カタカナは自動で入る)
-	bool Create(const wchar_t* ttfPath, const wchar_t* faceName, int pixelSize,
-		const std::wstring& extraChars = L"") {
-		AddFontResourceExW(ttfPath, FR_PRIVATE, 0);
+	// font_atlas.png は、exe を実行するフォルダ(Novice の画像と同じ場所)に置く
+	// このエンジンは、同階層のファイルを読むとき、名前の先頭に "./" が必要
+	bool Create(const char* atlasPath = "./font_atlas.png") {
+		texture_ = Novice::LoadTexture(atlasPath);
 
-		// 使う文字の集合: ASCII + ひらがな + カタカナ + 句読点 + 追加分
-		std::set<wchar_t> chars;
-		for (wchar_t c = 0x20; c <= 0x7E; ++c) chars.insert(c);
-		for (wchar_t c = 0x3041; c <= 0x3096; ++c) chars.insert(c);
-		for (wchar_t c = 0x30A1; c <= 0x30FC; ++c) chars.insert(c);
-		for (wchar_t c : std::wstring(L"、。「」・！？")) chars.insert(c);
-		for (wchar_t c : extraChars) chars.insert(c);
-
-		HDC screen = GetDC(nullptr);
-		HDC dc = CreateCompatibleDC(screen);
-		HFONT font = CreateFontW(-pixelSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, faceName);
-		HGDIOBJ oldFont = SelectObject(dc, font);
-
-		TEXTMETRICW tm;
-		GetTextMetricsW(dc, &tm);
-		cellH_ = tm.tmHeight + 2;
-
-		// 1) 各文字の幅を測り、幅1024の棚詰めでレイアウトを決める
-		const int kAtlasW = 1024;
-		int x = 0, y = 0;
-		for (wchar_t c : chars) {
-			SIZE sz;
-			GetTextExtentPoint32W(dc, &c, 1, &sz);
-			int w = sz.cx + 2;
-			if (x + w > kAtlasW) { x = 0; y += cellH_; }
-			glyphs_[c] = { x, y, w };
-			x += w;
+		// 文字コード -> 画像の何番目のマスか
+		index_.clear();
+		for (int i = 0; i < FontAtlas::kCount; ++i) {
+			index_[static_cast<wchar_t>(FontAtlas::kCodes[i])] = i;
 		}
-		atlasW_ = kAtlasW;
-		atlasH_ = y + cellH_;
-
-		// 2) 24bit DIB に白文字を描く(背景は黒)
-		BITMAPINFO bi = {};
-		bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-		bi.bmiHeader.biWidth = atlasW_;
-		bi.bmiHeader.biHeight = atlasH_; // 正 = 下から上
-		bi.bmiHeader.biPlanes = 1;
-		bi.bmiHeader.biBitCount = 24;
-		bi.bmiHeader.biCompression = BI_RGB;
-		void* bits = nullptr;
-		HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-		HGDIOBJ oldBmp = SelectObject(dc, bmp);
-
-		SetBkMode(dc, TRANSPARENT);
-		SetTextColor(dc, RGB(255, 255, 255));
-		for (auto& [c, g] : glyphs_) {
-			TextOutW(dc, g.x + 1, g.y + 1, &c, 1);
-		}
-		GdiFlush();
-
-		// 3) BMP として書き出して Novice に読ませる
-		// このエンジンは、同階層のファイルを読むとき、名前の先頭に "./" が必要
-		static int counter = 0;
-		std::string path = "./fontatlas_" + std::to_string(counter++) + ".bmp";
-
-		int stride = ((atlasW_ * 3 + 3) & ~3);
-		DWORD imageSize = stride * atlasH_;
-		BITMAPFILEHEADER bf = {};
-		bf.bfType = 0x4D42; // 'BM'
-		bf.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-		bf.bfSize = bf.bfOffBits + imageSize;
-		std::ofstream ofs(path, std::ios::binary);
-		ofs.write(reinterpret_cast<char*>(&bf), sizeof(bf));
-		ofs.write(reinterpret_cast<char*>(&bi.bmiHeader), sizeof(BITMAPINFOHEADER));
-		ofs.write(static_cast<char*>(bits), imageSize);
-		ofs.close();
-
-		texture_ = Novice::LoadTexture(path.c_str());
-
-		// 後片付け
-		SelectObject(dc, oldBmp);
-		SelectObject(dc, oldFont);
-		DeleteObject(bmp);
-		DeleteObject(font);
-		DeleteDC(dc);
-		ReleaseDC(nullptr, screen);
-		RemoveFontResourceExW(ttfPath, FR_PRIVATE, 0);
 		return true;
 	}
 
 	// 文字列を描画する(text は UTF-8 として扱う。ソースが Shift-JIS なら CP_ACP を渡す)
+	// 文字の大きさは 24px。scale は 1.0f / 2.0f など整数倍にするとにじまない
+	// "\n" で改行できる
 	void Draw(int x, int y, const std::string& text, unsigned int color = 0xFFFFFFFF,
 		float scale = 1.0f, UINT codePage = CP_UTF8) {
 		std::wstring w = ToWide(text, codePage);
-		Novice::SetBlendMode(kBlendModeAdd); // 黒背景を透明扱いにする
+		const int pad = static_cast<int>(FontAtlas::kPad * scale);
 		float cx = static_cast<float>(x);
+		float cy = static_cast<float>(y);
 		for (wchar_t c : w) {
-			auto it = glyphs_.find(c);
-			if (it == glyphs_.end()) { // 未登録文字はスキップ(幅だけ空ける)
-				cx += cellH_ * 0.5f * scale;
+			if (c == L'\n') { // 改行
+				cx = static_cast<float>(x);
+				cy += FontAtlas::kLineH * scale;
 				continue;
 			}
-			const Glyph& g = it->second;
+			auto it = index_.find(c);
+			if (it == index_.end()) { // 画像に無い文字は、半角分だけ空ける
+				cx += FontAtlas::kLineH * 0.5f * scale;
+				continue;
+			}
+			const int i = it->second;
+			const int srcX = (i % FontAtlas::kCols) * FontAtlas::kCellW;
+			const int srcY = (i / FontAtlas::kCols) * FontAtlas::kCellH;
 			// DrawSpriteRect の scale は「切り出し幅 / 画像全体の幅」で指定する
-			Novice::DrawSpriteRect(static_cast<int>(cx), y, g.x, g.y, g.w, cellH_, texture_,
-				static_cast<float>(g.w) / atlasW_ * scale,
-				static_cast<float>(cellH_) / atlasH_ * scale, 0.0f, color);
-			cx += (g.w - 2) * scale;
+			Novice::DrawSpriteRect(
+				static_cast<int>(cx) - pad, static_cast<int>(cy) - pad, srcX, srcY,
+				FontAtlas::kCellW, FontAtlas::kCellH, texture_,
+				static_cast<float>(FontAtlas::kCellW) / FontAtlas::kAtlasW * scale,
+				static_cast<float>(FontAtlas::kCellH) / FontAtlas::kAtlasH * scale, 0.0f, color);
+			cx += FontAtlas::kAdvance[i] * scale;
 		}
-		Novice::SetBlendMode(kBlendModeNormal);
 	}
 
-	// Novice::ScreenPrintf と同じ書式で使える(文字色は白)
 	void Printf(int x, int y, const char* format, ...) {
 		char buf[512];
 		va_list args;
@@ -133,9 +68,19 @@ public:
 		Draw(x, y, buf);
 	}
 
-private:
-	struct Glyph { int x, y, w; };
+	// 文字列の横幅(px)。中央そろえなどに使う
+	int Width(const std::string& text, float scale = 1.0f, UINT codePage = CP_UTF8) const {
+		std::wstring w = ToWide(text, codePage);
+		float width = 0.0f;
+		for (wchar_t c : w) {
+			auto it = index_.find(c);
+			width += (it == index_.end()) ? FontAtlas::kLineH * 0.5f * scale
+				: FontAtlas::kAdvance[it->second] * scale;
+		}
+		return static_cast<int>(width);
+	}
 
+private:
 	static std::wstring ToWide(const std::string& s, UINT cp) {
 		if (s.empty()) return L"";
 		int n = MultiByteToWideChar(cp, 0, s.c_str(), (int)s.size(), nullptr, 0);
@@ -144,9 +89,8 @@ private:
 		return w;
 	}
 
-	std::map<wchar_t, Glyph> glyphs_;
+	std::map<wchar_t, int> index_;
 	int texture_ = -1;
-	int atlasW_ = 0, atlasH_ = 0, cellH_ = 0;
 };
 
 // ゲーム全体で共有する FontRenderer を返す
