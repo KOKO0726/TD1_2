@@ -486,9 +486,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			// ジャンプ中、キーを離していたら上昇を抑える（小ジャンプ対応）
+			// ジャンプ中、キーを離していたら上昇を強く抑える（小ジャンプ対応：調整幅拡大）
 			if (!player.onGround && player.vy < 0.0f && !jumpHeld) {
-				player.vy += 0.6f;
+				player.vy += 1.2f;
 			}
 
 			// ダッシュ：左シフト
@@ -566,7 +566,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			bool hover = false;
 			if (player.atkTimer > 0) {
 				if (!player.atkAir) {
-					player.vx = (player.atkTimer > 10) ? player.dir * 5.0f : 0.0f;
+					// 攻撃中の前進移動仕様を削除（その場で停止）
+					player.vx = 0.0f;
 				}
 				else {
 					player.vx *= 0.4f;
@@ -633,8 +634,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					boss.flash = 6;
 					shake = finisher ? 16 : 6;
 					if (player.invincible < 15) player.invincible = 15;
-					float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
-					boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
+
+					// ステージ3（ウィザード型：boss.type == 2）のみノックバックしない
+					if (boss.type != 2) {
+						float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
+						boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
+					}
 				}
 
 				for (int i = 0; i < kMaxEBullets; i++) {
