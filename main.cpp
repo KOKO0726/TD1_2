@@ -344,10 +344,8 @@ static void SpawnLaser(
 	}
 }
 
-// ステージ3用：行動プールを補充（フェーズ1は7種、重み付き、フェーズ2は7種+時間停止4種）
 static void RefillStage3Patterns(Boss& boss) {
 	int idx = 0;
-	// 行動0と1は「2」の重みなので、プールに2つずつ入れる
 	boss.patternPool[idx++] = 0;
 	boss.patternPool[idx++] = 0;
 	boss.patternPool[idx++] = 1;
@@ -408,7 +406,6 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
 	for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
 
-	// ステージ3のボスのみサイズを 48 * 76 に変更
 	if (stage == 2) {
 		boss.w = 48.0f;
 		boss.h = 76.0f;
@@ -426,7 +423,7 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.maxHp = bossHpTable[stage];
 	boss.hp = boss.maxHp;
 
-	const int bossBreakTable[kTotalStages] = { 1500, 1500, 1500 };
+	const int bossBreakTable[kTotalStages] = { 2000, 2500, 3000 };
 	boss.maxBreakGauge = bossBreakTable[stage];
 	boss.breakGauge = boss.maxBreakGauge;
 	boss.isBroken = false;
@@ -553,13 +550,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	//int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
+	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
 	int meteorAnimationFrame = 0;
 	int meteorAnimationTimer = 0;
 
 	const int kMeteorAnimationSpeed = 5;
-	//const int kMeteorFrameWidth = 64;
-	//const int kMeteorFrameHeight = 64;
+	const int kMeteorFrameWidth = 64;
+	const int kMeteorFrameHeight = 64;
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
@@ -596,7 +593,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		frame++;
 
-		// ステージ3は3つの足場を削除し、地面(1つ)のみにする
 		int activePlatformNum = (currentStage == 2) ? 1 : kPlatformNum;
 
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
@@ -640,7 +636,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			bool isTimeStopped = (boss.type == 2 && boss.timeStopTimer > 0);
 
 			if (!isTimeStopped) {
-				// ----- プレイヤー操作 -----
 				player.vx = 0.0f;
 				if (keys[DIK_A]) {
 					player.vx = -kMoveSpeed;
@@ -800,7 +795,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (popups[i].timer > 0) popups[i].timer--;
 			}
 
-			// 近接攻撃のヒット判定
 			if (!isTimeStopped && player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
 				float ax, ay, aw, ah;
 				MeleeBox(player, &ax, &ay, &aw, &ah);
@@ -864,7 +858,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 				else {
 					if (boss.type == 0) {
-						// (Sniper AI 省略せずそのまま)
+						// ==========================================
+						// ステージ1 スナイパー型 ボスAI（チャージ＆流星群攻撃を含む）
+						// ==========================================
 						switch (boss.state) {
 						case 0:
 							boss.dir = (pcx > bcx) ? 1 : -1;
@@ -908,7 +904,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						}
 					}
 					else if (boss.type == 1) {
-						// (Crusher AI 省略せずそのまま)
 						switch (boss.state) {
 						case 0:
 							if (!isReverseAttackUsed) { isScreenReverse = true; isReverseAttackUsed = true; }
@@ -956,12 +951,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
 							break;
 						}
-
 					}
 					else {
-						// ==================================================
+						// ==========================================
 						// ステージ3 ウィザード型 ボスAI
-						// ==================================================
+						// ==========================================
 						if (boss.phase == 1 && boss.hp < static_cast<int>(boss.maxHp * 0.6f)) {
 							boss.phase = 2;
 							boss.hidden = false;
@@ -996,7 +990,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							}
 						}
 						else if (boss.state == 1) {
-							// フェーズ2の時間停止行動（7〜10）の前には必ず1秒（60フレーム）の溜めを入れる
 							if (boss.currentPattern >= 7 && boss.currentPattern <= 10 && boss.timeStopPrepTimer < 60) {
 								boss.timeStopPrepTimer++;
 								if (boss.timeStopPrepTimer == 60) {
@@ -1006,7 +999,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							else {
 								switch (boss.currentPattern) {
 								case 0:
-									// パターン0: 背後から出現し真っすぐ突撃 (出現から突撃までに0.2秒=12フレームのラグ, 突進中のみ接触ダメージ有効, パリィ無効)
 									if (boss.subState == 0) {
 										boss.hidden = true;
 										boss.subTimer++;
@@ -1026,7 +1018,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 										}
 									}
 									else if (boss.subState == 1) {
-										// 出現から突撃までに0.2秒（12フレーム）のラグ
 										boss.subTimer++;
 										if (boss.subTimer >= 12) {
 											boss.subState = 2;
@@ -1034,7 +1025,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 										}
 									}
 									else if (boss.subState == 2) {
-										// 突進中
 										boss.x += boss.dir * 22.0f;
 										boss.subTimer++;
 										if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.subTimer >= 35) {
@@ -1046,7 +1036,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 1:
-									// パターン1: 上部から出現し、高速で落下 (出現から落下までに0.2秒=12フレームのラグ, 落下中のみ接触ダメージ有効, パリィ無効)
 									if (boss.subState == 0) {
 										boss.hidden = true;
 										boss.subTimer++;
@@ -1080,7 +1069,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 2:
-									// パターン2: 地面をまっ直ぐ移動する弾2を左右から放ちながら、プレイヤーに向けて弾1を放つ（レーザー削除）
 									boss.dir = (pcx > bcx) ? 1 : -1;
 									boss.subTimer++;
 									if (boss.subTimer % 45 == 1) {
@@ -1097,7 +1085,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 3:
-									// パターン3: 空中のランダムな位置へ移動し、プレイヤーに向けてレーザーを放つ（レーザーは1回のみ）
 									if (boss.subState == 0) {
 										boss.startX = boss.x;
 										boss.startY = boss.y;
@@ -1125,7 +1112,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									}
 									else if (boss.subState == 2) {
 										boss.subTimer++;
-										// 1回のみなのでそのまま着地へ
 										if (boss.subTimer >= 52) {
 											boss.y = groundY - boss.h;
 											boss.state = 0;
@@ -1135,7 +1121,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 4:
-									// パターン4: 空中の画面中央へ移動。上方向から60~-60度ずれた方向にレーザーを放ちまくる（放つレーザーの合計と速度を1.5倍に）
 									if (boss.subState == 0) {
 										boss.startX = boss.x;
 										boss.startY = boss.y;
@@ -1156,7 +1141,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									}
 									else if (boss.subState == 2) {
 										boss.subTimer++;
-										// 1.5倍の頻度（約18フレーム毎、かつ合計発射数を増やす）
 										if (boss.subTimer % 18 == 1 && boss.subTimer <= 220) {
 											float curCx = boss.x + boss.w * 0.5f;
 											float curCy = boss.y + boss.h * 0.5f;
@@ -1175,7 +1159,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 5:
-									// パターン5: 空中の端へ移動。画面を左右に移動しながら、重力に従う弾1と弾2をばら撒く（落とす弾の数を1.5倍程度増やす）
 									if (boss.subState == 0) {
 										boss.startX = boss.x;
 										boss.startY = boss.y;
@@ -1198,7 +1181,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									else if (boss.subState == 2) {
 										boss.x -= 11.0f;
 										boss.subTimer++;
-										// 1.5倍増やす（12フレーム毎 -> 8フレーム毎）
 										if (boss.subTimer % 8 == 0) {
 											bool isBullet2 = ((boss.subTimer / 8) % 2 == 0);
 											float bvx = static_cast<float>((rand() % 5) - 2);
@@ -1228,7 +1210,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 6:
-									// パターン6: X980地点に移動。16方向に連続して弾をばら撒く。起点方向5度ズレ。右端からX0地点まで持続する縦レーザーを2回放つ
 									if (boss.subState == 0) {
 										boss.startX = boss.x;
 										boss.startY = boss.y;
@@ -1246,7 +1227,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 											boss.subState = 2;
 											boss.subTimer = 0;
 											boss.angleOffset = 0.0f;
-											// 1回目の右端からX0地点まで持続する縦レーザー (vx = -kScreenW / activeTimer)
 											SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 260, false, true, -kScreenW / 260.0f, true);
 										}
 									}
@@ -1256,14 +1236,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 										if (boss.subTimer % 28 == 1 && boss.subTimer <= 220) {
 											float curCx = boss.x + boss.w * 0.5f;
 											float curCy = boss.y + boss.h * 0.5f;
-											for (int i = 0; i < 16; i++) { // 32方向から16方向に修正
+											for (int i = 0; i < 16; i++) {
 												float ang = boss.angleOffset + i * (2.0f * kPi / 16.0f);
 												bool isBullet2 = (i % 2 == 1);
 												FireAngle(ebullets, curCx, curCy, ang, 5.2f, 8.0f, isBullet2);
 											}
 											boss.angleOffset += 5.0f * (kPi / 180.0f);
 										}
-										// 行動中に2回目のレーザーを放つ
 										if (boss.subTimer == 130) {
 											SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 130, false, true, -kScreenW / 130.0f, true);
 										}
@@ -1276,7 +1255,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 7:
-									// フェーズ2行動1: 時間停止し、プレイヤー周囲に4つの弾2を設置 (90*4)
 									if (boss.subState == 0) {
 										boss.timeStopTimer = 90;
 										boss.subState = 1;
@@ -1289,7 +1267,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 											float bx = pcx + cosf(ang) * dist;
 											float by = pcy + sinf(ang) * dist;
 
-											// 空きスロットを探して確実に設定
 											for (int i = 0; i < kMaxEBullets; i++) {
 												if (!ebullets[i].active) {
 													ebullets[i].active = true;
@@ -1301,7 +1278,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 													ebullets[i].wave = false;
 													ebullets[i].reflected = false;
 													ebullets[i].meteor = false;
-													ebullets[i].unparryable = true; // 弾2
+													ebullets[i].unparryable = true;
 													ebullets[i].useGravity = false;
 													ebullets[i].spawnLaserOnLand = false;
 													ebullets[i].waitTimeStop = true;
@@ -1345,7 +1322,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 8:
-									// フェーズ2行動2: 時間停止し、プレイヤー周囲に4つの弾2を設置 (45+90*4)
 									if (boss.subState == 0) {
 										boss.timeStopTimer = 90;
 										boss.subState = 1;
@@ -1413,7 +1389,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 9:
-									// フェーズ2行動3: 時間停止し、プレイヤー周囲に8つの弾1を設置
 									if (boss.subState == 0) {
 										boss.timeStopTimer = 90;
 										boss.subState = 1;
@@ -1437,7 +1412,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 													ebullets[i].wave = false;
 													ebullets[i].reflected = false;
 													ebullets[i].meteor = false;
-													ebullets[i].unparryable = false; // 弾1（パリィ可能）
+													ebullets[i].unparryable = false;
 													ebullets[i].useGravity = false;
 													ebullets[i].spawnLaserOnLand = false;
 													ebullets[i].waitTimeStop = true;
@@ -1481,14 +1456,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									break;
 
 								case 10:
-									// フェーズ2行動4: 時間停止し、空中に10個の弾1、20個の弾2を設置。解除後一斉に下方向へ。着弾後弾2なら縦レーザー
 									if (boss.subState == 0) {
 										boss.timeStopTimer = 90;
 										boss.subState = 1;
 										boss.subTimer = 0;
 										shake = 14;
 
-										// 10個の弾1
 										for (int k = 0; k < 10; k++) {
 											float bx = static_cast<float>(50 + rand() % (kScreenW - 100));
 											float by = static_cast<float>(50 + rand() % 150);
@@ -1511,7 +1484,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 												}
 											}
 										}
-										// 20個の弾2
 										for (int k = 0; k < 20; k++) {
 											float bx = static_cast<float>(30 + rand() % (kScreenW - 60));
 											float by = static_cast<float>(30 + rand() % 200);
@@ -1528,7 +1500,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 													ebullets[i].meteor = false;
 													ebullets[i].unparryable = true;
 													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = true; // 着弾後縦レーザー
+													ebullets[i].spawnLaserOnLand = true;
 													ebullets[i].waitTimeStop = true;
 													break;
 												}
@@ -1543,7 +1515,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 												if (ebullets[i].active && ebullets[i].waitTimeStop) {
 													ebullets[i].waitTimeStop = false;
 													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 8.0f; // 下方向に動き出す
+													ebullets[i].vy = 8.0f;
 												}
 											}
 											boss.subState = 2;
@@ -1622,7 +1594,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						EBullet& b = ebullets[i];
 						if (!b.active) continue;
 
-						if (b.waitTimeStop) continue; // 時間停止解除待ちの弾は移動しない
+						if (b.waitTimeStop) continue;
 
 						if (b.useGravity) {
 							b.vy += kGravity * 0.45f;
@@ -1656,7 +1628,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							continue;
 						}
 
-						// 弾1(!b.unparryable)のみパリィ可能。弾2(b.unparryable)はパリィ不可
 						if (!b.unparryable && player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
 							if (b.wave) {
 								b.active = false;
@@ -1683,7 +1654,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 
-				// ステージ3のボス接触処理（接触ダメージ・接触パリィ完全無効。ただしパターン0・1の突進中のみ接触ダメージを有効化）
 				if (boss.type == 2) {
 					bool bossRushActive = (boss.state == 1 && (boss.currentPattern == 0 || boss.currentPattern == 1) && boss.subState == 2);
 					if (bossRushActive && !boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
@@ -1693,7 +1663,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 				else if (!boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
-					// ステージ1・2のボス接触処理
 					if (player.parryTimer > 0) {
 						boss.state = 4;
 						boss.timer = 70;
@@ -1777,6 +1746,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				drawH = boss.h - crouch;
 				drawY = boss.y + crouch;
 			}
+			// ステージ1のチャージ中の姿勢制御
+			else if (boss.type == 0 && boss.state == 3) {
+				drawH = boss.h - 15.0f;
+				drawY = boss.y + 15.0f;
+				bodyColor = 0xBB66FFFF;
+			}
 
 			if (!boss.hidden) {
 				Rect(boss.x, drawY, boss.w, drawH, bodyColor);
@@ -1798,11 +1773,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
 					Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
 					Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+
+					if (boss.type == 0) {
+						Rect(boss.x + boss.w * 0.5f - 5.0f, drawY - 30.0f, 10.0f, 30.0f, 0xCCCCCCFF);
+					}
 				}
 			}
 
 			if (boss.isBroken) {
 				PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
+			}
+			// ステージ1のチャージ中演出（エフェクト円 ＆ "CHARGING..." テキスト）の復元
+			else if (boss.type == 0 && boss.state == 3) {
+				float centerX = boss.x + boss.w * 0.5f;
+				float centerY = boss.y + boss.h * 0.5f;
+				float effectSize = 60.0f + (frame % 20) * 2.0f;
+				Circle(centerX, centerY, effectSize, 0xAA66FF55);
+				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "CHARGING...");
 			}
 			else if (boss.type == 2 && boss.timeStopPrepTimer > 0 && boss.timeStopPrepTimer < 60) {
 				PrintfCenter(640, 180, "PREPARING TIME STOP...");
@@ -1860,6 +1847,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (b.reflected) {
 					Circle(b.x, b.y, b.r, 0x66FFFFFF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
+				}
+				// ステージ1の流星群攻撃（スプライト描画の復元）
+				else if (b.meteor) {
+					Novice::DrawSpriteRect(
+						static_cast<int>(b.x - kMeteorFrameWidth * 0.5f) + gShakeX,
+						static_cast<int>(b.y - kMeteorFrameHeight * 0.5f) + gShakeY,
+						meteorAnimationFrame * kMeteorFrameWidth,
+						0,
+						kMeteorFrameWidth,
+						kMeteorFrameHeight,
+						meteorTexture,
+						1.0f / 4.0f,
+						1.0f,
+						0.0f,
+						0xFFFFFFFF
+					);
 				}
 				else if (boss.type == 2) {
 					if (b.unparryable) {
