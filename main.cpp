@@ -64,6 +64,7 @@ struct EBullet {
 	bool active;
 	bool wave;
 	bool reflected; // パリィで跳ね返された弾
+	bool meteor; // 流星群
 };
 
 struct Platform {
@@ -128,9 +129,19 @@ static bool LandOnPlatform(const Platform* plats, float x, float w, float prevBo
 
 static float Clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
-static void FireEBullet(EBullet* arr, float x, float y, float vx, float vy, float r, bool wave) {
-	for (int i = 0; i < kMaxEBullets; i++) {
-		if (!arr[i].active) {
+static void FireEBullet(
+	EBullet* arr,
+	float x, float y,
+	float vx, float vy,
+	float r,
+	bool wave,
+	bool meteor = false
+) 
+{
+	for (int i = 0; i < kMaxEBullets; i++) 
+	{
+		if (!arr[i].active) 
+		{
 			arr[i].active = true;
 			arr[i].x = x;
 			arr[i].y = y;
@@ -139,16 +150,21 @@ static void FireEBullet(EBullet* arr, float x, float y, float vx, float vy, floa
 			arr[i].r = r;
 			arr[i].wave = wave;
 			arr[i].reflected = false;
+			arr[i].meteor = meteor;
 			return;
 		}
 	}
 }
 
-static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r) {
+static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r) 
+{
 	FireEBullet(arr, x, y, cosf(angle) * speed, sinf(angle) * speed, r, false);
 }
-
-static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, int stage) {
+//==================================================
+//ボスの種類ごとに初期化する関数
+//==================================================
+static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, int stage) 
+{
 	pl.x = 200.0f;
 	pl.y = groundY - 48.0f;
 	pl.vx = pl.vy = 0.0f;
@@ -182,9 +198,10 @@ static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, 
 	boss.x = 1000.0f;
 	boss.y = groundY - boss.h;
 	boss.vx = boss.vy = 0.0f;
-	boss.type = stage; // ステージごとにボスの種類を決定 (0:スナイパー, 1:クラッシャー, 2:ウィザード)
-
-	const int bossHpTable[kTotalStages] = { 45, 60, 75 };
+	// ステージごとにボスの種類を決定 (0:スナイパー, 1:クラッシャー, 2:ウィザード)
+	boss.type = stage; 
+	//エネミーの体力をステージごとに設定
+	const int bossHpTable[kTotalStages] = { 50, 65, 80 };
 	boss.maxHp = bossHpTable[stage];
 	boss.hp = boss.maxHp;
 
@@ -294,6 +311,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
+
+	// ==================================================
+	// 画像
+	// ==================================================
+	// 流星アニメーション
+	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
+
+	int meteorAnimationFrame = 0;
+	int meteorAnimationTimer = 0;
+
+	const int kMeteorAnimationSpeed = 5;
+	const int kMeteorFrameWidth = 64;
+	const int kMeteorFrameHeight = 64;
+
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
@@ -569,8 +600,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						boss.x += boss.dir * 1.5f;
 						boss.timer--;
 						if (boss.timer <= 0) {
-							boss.state = (rand() % 2 == 0) ? 1 : 2;
-							boss.timer = (boss.state == 1) ? 50 : 70;
+							int pick = rand() % 3;
+
+							if (pick == 0) 
+							{
+								boss.state = 1;
+								boss.timer = 50;
+							}
+							else if (pick == 1) 
+							{
+								boss.state = 2;
+								boss.timer = 70;
+							}
+							else 
+							{
+								// ステージ１の流星群攻撃のチャージ
+								boss.state = 3;
+								boss.timer = 100;
+							}
 						}
 						break;
 					case 1:
@@ -593,6 +640,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						if (boss.timer <= 0) {
 							boss.state = 0;
 							boss.timer = 90;
+						}
+						break;
+					case 3:
+						// ボスをプレイヤーの方向に向かせてゆっくり移動させる
+						boss.dir = (pcx > bcx) ? 1 : -1;
+						boss.x += boss.dir * 1.5f;
+
+						boss.timer--;
+						// 流星を発射する処理
+						if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0)
+						{
+							// プレイヤー付近を狙う位置
+							float startX = static_cast<float>(rand() % kScreenW);
+							float targetX = static_cast<float>(rand() % kScreenW);
+							// 流星の出現位置
+							float meteorVx = (targetX - startX) / 55.0f;
+							// 少し斜めに落ちるようにする
+							FireEBullet(
+								ebullets,
+								startX,
+								-40.0f,
+								meteorVx,
+								10.0f,
+								15.0f,
+								false,
+								true
+							);
+						}
+						// チャージ・発射が終わったら通常状態（case 0）に戻す
+						if (boss.timer <= 0) {
+							boss.state = 0;
+							boss.timer = 70;
 						}
 						break;
 					case 4:
@@ -787,6 +866,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kGameOver;
 			}
 		}
+		//==========================================
+		//アニメーション更新処理
+		//==========================================
+		meteorAnimationTimer++;
+
+		if (meteorAnimationTimer >= kMeteorAnimationSpeed)
+		{
+			meteorAnimationTimer = 0;
+
+			meteorAnimationFrame++;
+
+			if (meteorAnimationFrame >= 4)
+			{
+				meteorAnimationFrame = 0;
+			}
+		}
 
 		// ==========================================
 		// 描画処理
@@ -817,6 +912,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			float drawH = boss.h;
 			float drawY = boss.y;
+			// ステージ1の流星群チャージ演出
+			if (boss.type == 0 && boss.state == 3) {
+
+				// ボス縮む
+				drawH = boss.h - 15.0f;
+				drawY = boss.y + 15.0f;
+
+				// チャージ中紫色に光る
+				bodyColor = 0xBB66FFFF;
+			}
 			if (boss.type == 1 && boss.state == 2) {
 				drawH = boss.h - 30.0f;
 				drawY = boss.y + 30.0f;
@@ -842,6 +947,30 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Rect(boss.x + boss.w * 0.5f - 15.0f, drawY - 35.0f, 30.0f, 35.0f, 0xDD99FFFF);
 			}
 
+			// ステージ１の流星群チャージ中のエフェクト
+			if (boss.type == 0 && boss.state == 3) {
+
+				float centerX = boss.x + boss.w * 0.5f;
+				float centerY = boss.y + boss.h * 0.5f;
+
+				// 周囲にチャージの輪を表示
+				float effectSize = 60.0f + (frame % 20) * 2.0f;
+
+				Circle(
+					centerX,
+					centerY,
+					effectSize,
+					0xAA66FF55
+				);
+
+				// チャージ中の文字
+				PrintfCenter(
+					static_cast<int>(centerX),
+					static_cast<int>(boss.y - 45.0f),
+					"CHARGING..."
+				);
+			}
+
 			for (int i = 0; i < kMaxEBullets; i++) {
 				const EBullet& b = ebullets[i];
 				if (!b.active) continue;
@@ -849,11 +978,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Circle(b.x, b.y, b.r, 0x66FFFFFF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
-				else if (b.wave) {
-					Rect(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, 0xFF8800FF);
+				// 流星の描画
+				else if (b.meteor)
+				{
+					Novice::DrawSpriteRect(
+						static_cast<int>(b.x - kMeteorFrameWidth * 0.5f) + gShakeX,
+						static_cast<int>(b.y - kMeteorFrameHeight * 0.5f) + gShakeY,
+						meteorAnimationFrame * kMeteorFrameWidth,
+						0,
+						kMeteorFrameWidth,
+						kMeteorFrameHeight,
+						meteorTexture,
+						1.0f / 4.0f, 
+						1.0f,        
+						0.0f,
+						0xFFFFFFFF
+					);
 				}
 				else {
-					Circle(b.x, b.y, b.r, boss.type == 0 ? 0x00FF88FF : (boss.type == 1 ? 0xFF8800FF : 0xFF44FFFF));
+					Circle(
+						b.x,
+						b.y,
+						b.r,
+						boss.type == 0 ? 0x00FF88FF :
+						(boss.type == 1 ? 0xFF8800FF : 0xFF44FFFF)
+					);
+
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 			}
