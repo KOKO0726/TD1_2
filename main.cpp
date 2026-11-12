@@ -602,22 +602,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						if (boss.timer <= 0) {
 							int pick = rand() % 3;
 
-							if (pick == 0) 
+							if (pick == 0)
 							{
 								boss.state = 1;
 								boss.timer = 50;
 							}
-							else if (pick == 1) 
+							else if (pick == 1)
 							{
 								boss.state = 2;
 								boss.timer = 70;
 							}
-							else 
+							else
 							{
 								// ステージ１の流星群攻撃のチャージ
 								boss.state = 3;
 								boss.timer = 100;
 							}
+						}
+						else
+						{
+							boss.state = 4;
+							boss.timer = 150;
 						}
 						break;
 					case 1:
