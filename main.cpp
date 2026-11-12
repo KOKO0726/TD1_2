@@ -161,6 +161,10 @@ static void PrintfCenter(int centerX, int y, const char* format, ...) {
 	GetFont().Draw(centerX - GetFont().Width(buf) / 2, y, buf);
 }
 
+//画面反転のフラグ
+bool isScreenReverse = false;
+bool isReverseAttackUsed = false;
+
 // ==================================================
 // 共通関数
 // ==================================================
@@ -946,16 +950,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					else if (boss.type == 1) {
 						switch (boss.state) {
 						case 0:
+							if (!isReverseAttackUsed)
+							{
+								isScreenReverse = true;
+								isReverseAttackUsed = true;
+							}
+
+
+						case 1:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 2.5f;
 							boss.timer--;
 							if (boss.timer <= 0) {
-								boss.state = (rand() % 2 == 0) ? 1 : 2;
+								boss.state = (rand() % 3 == 0) ? 2 : 3;
 								if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
 								else { boss.timer = 25; }
 							}
 							break;
-						case 1:
+						case 2:
 							boss.x += boss.dir * 16.0f;
 							boss.timer--;
 							if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
@@ -964,15 +976,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								boss.timer = 80;
 							}
 							break;
-						case 2:
+						case 3:
 							boss.timer--;
 							if (boss.timer <= 0) {
 								boss.vy = -22.0f;
 								boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
-								boss.state = 3;
+								boss.state = 4;
 							}
 							break;
-						case 3:
+						case 4:
 							boss.vy += kGravity;
 							boss.x += boss.vx;
 							boss.y += boss.vy;
@@ -987,7 +999,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								boss.timer = 90;
 							}
 							break;
-						case 4:
+						case 5:
 							boss.timer--;
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
 							break;
