@@ -619,11 +619,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								boss.timer = 100;
 							}
 						}
-						else
-						{
-							boss.state = 4;
-							boss.timer = 150;
-						}
+				
 						break;
 					case 1:
 						boss.timer--;
