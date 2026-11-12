@@ -22,12 +22,13 @@ const float kJumpPower = -17.0f;
 const float kMaxFall = 20.0f;
 const float kPi = 3.14159265f;
 
-const int kMaxEBullets = 96;  // ボスの弾
+const int kMaxEBullets = 256; // ステージ3の弾幕用に拡張
+const int kMaxLasers = 32;    // ステージ3のレーザー用
 const int kPlatformNum = 4;
 
 const int kPlayerMaxHp = 5;
 const int kIntroFrames = 120;
-const int kTotalStages = 3;   // ステージ数
+const int kTotalStages = 3; // ステージ数
 
 const int kBreakDuration = 360; // ブレイク時の行動停止フレーム数 (3秒)
 
@@ -42,23 +43,23 @@ struct Player {
 	int dir; // 1:右 -1:左
 	int hp;
 	int invincible;
-	int jumpCount;      // 二段ジャンプ用(使用した回数)
-	int dashTimer;      // ダッシュ残りフレーム
+	int jumpCount;   // 二段ジャンプ用(使用した回数)
+	int dashTimer;   // ダッシュ残りフレーム
 	int dashDir;
 	int dashCooldown;
-	int airDashLeft;    // 空中ダッシュ残り回数(着地で回復)
-	int parryTimer;     // パリィ判定が出ている残りフレーム
+	int airDashLeft; // 空中ダッシュ残り回数(着地で回復)
+	int parryTimer;  // パリィ判定が出ている残りフレーム
 	int parryCooldown;
-	int parryFlash;     // パリィ成功エフェクト
+	int parryFlash; // パリィ成功エフェクト
 	// ---- 近接攻撃 ----
-	int atkTimer;       // 攻撃の残りフレーム
-	int atkStep;        // コンボの段数(地上:1〜8, 空中:1〜4)
-	bool atkAir;        // 空中攻撃か
-	bool atkHit;        // この一振りがボスに当たったか
-	int atkHi, atkLo;   // 判定が出るフレーム範囲(atkTimerがこの範囲内)
+	int atkTimer;     // 攻撃の残りフレーム
+	int atkStep;      // コンボの段数(地上:1〜8, 空中:1〜4)
+	bool atkAir;      // 空中攻撃か
+	bool atkHit;      // この一振りがボスに当たったか
+	int atkHi, atkLo; // 判定が出るフレーム範囲(atkTimerがこの範囲内)
 	int atkDmg;
-	int comboWindow;    // 次の段を入力できる猶予(この間は空中に留まる)
-	int airComboLeft;   // 空中コンボ開始権(着地で回復)
+	int comboWindow;  // 次の段を入力できる猶予(この間は空中に留まる)
+	int airComboLeft; // 空中コンボ開始権(着地で回復)
 };
 
 struct EBullet {
@@ -66,7 +67,27 @@ struct EBullet {
 	bool active;
 	bool wave;
 	bool reflected; // パリィで跳ね返された弾
-	bool meteor; // 流星群
+	bool meteor;    // 流星群
+	// ---- ステージ3用拡張 ----
+	bool unparryable;       // true: 弾2（パリィ不可）, false: 弾1（パリィ可能）
+	bool useGravity;        // 重力落下するか
+	bool spawnLaserOnLand;  // 着弾地点から縦レーザーを放つか
+	bool waitTimeStop;      // 時間停止解除待ちか
+	float aimX, aimY;       // 時間停止解除後に向かうターゲット座標
+	float launchSpeed;      // 時間停止解除後の弾速
+};
+
+struct Laser {
+	bool active;
+	float x1, y1, x2, y2; // 始点・終点（予告線・レーザー共通）
+	float width;          // レーザーの幅
+	int warnTimer;        // 予告時間（>0 の間は予告線のみ）
+	int activeTimer;      // 照射時間（warnTimer==0 になってから減少）
+	bool spawnSpread;     // 照射開始時に着弾点から16方向弾を放つか
+	bool spawnedSpread;   // 16方向弾を放ち済みか
+	bool movingVertical;  // 画面端から移動する縦レーザーか
+	float vx;             // 移動速度
+	bool airPhaseThrough; // プレイヤーが地面にいない時のみ半透明＆判定消滅
 };
 
 struct Platform {
@@ -78,26 +99,40 @@ struct Boss {
 	float vx, vy;
 	int hp;
 	int maxHp;
-	int breakGauge;     // 現在のブレイクゲージ
-	int maxBreakGauge;  // 最大ブレイクゲージ
-	bool isBroken;      // ブレイク状態か
-	int breakTimer;     // ブレイク残り時間
+	int breakGauge;    // 現在のブレイクゲージ
+	int maxBreakGauge; // 最大ブレイクゲージ
+	bool isBroken;     // ブレイク状態か
+	int breakTimer;    // ブレイク残り時間
 	int state;
 	int timer;
 	int dir;
 	int flash;
 	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
+
+	// ---- ステージ3専用AI変数 ----
+	bool hidden;            // 画面から消えているか
+	int phase;              // 1: HP60%以上, 2: HP60%未満
+	int patternPool[8];     // 未実行の行動リスト
+	int patternCount;       // リスト内の残り行動数
+	int currentPattern;     // 実行中の行動ID
+	int subState;           // 行動内のサブステップ
+	int subTimer;           // 行動内のサブタイマー
+	float targetX, targetY; // 移動目標座標
+	float startX, startY;   // 移動開始座標
+	float angleOffset;      // 連続弾の角度オフセット
+	int repeatCount;        // 行動内の繰り返し回数
+	int timeStopTimer;      // 時間停止残りフレーム
 };
 
 // ダメージ数字の表示(ボスにダメージを与えたとき、数字が浮かんで消える)
-const int kMaxDamagePopups = 16;    // 同時に出せる数
-const int kDamagePopupFrames = 45;  // 表示している長さ(フレーム)
+const int kMaxDamagePopups = 16;   // 同時に出せる数
+const int kDamagePopupFrames = 45; // 表示している長さ(フレーム)
 
 struct DamagePopup {
-	float x, y;     // 出した位置(ボスの頭の上)
-	int damage;     // 表示するダメージ量
-	int timer;      // 残りフレーム(0 以下 = 表示していない)
-	bool isCritical;// ブレイク中(1.5倍)の強調表示用
+	float x, y;      // 出した位置(ボスの頭の上)
+	int damage;      // 表示するダメージ量
+	int timer;       // 残りフレーム(0 以下 = 表示していない)
+	bool isCritical; // ブレイク中(1.5倍)の強調表示用
 };
 
 enum Scene { kTitle, kStageSelect, kPlay, kGameOver, kVictory };
@@ -133,8 +168,42 @@ static bool HitBox(float ax, float ay, float aw, float ah, float bx, float by, f
 	return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
 }
 
-static bool LandOnPlatform(const Platform* plats, float x, float w, float prevBottom, float newBottom, float* landY) {
-	for (int i = 0; i < kPlatformNum; i++) {
+// 線分と矩形の当たり判定（レーザー用）
+static bool HitLineBox(float x1, float y1, float x2, float y2, float lineRadius, float bx, float by, float bw, float bh) {
+	float minX = bx - lineRadius;
+	float maxX = bx + bw + lineRadius;
+	float minY = by - lineRadius;
+	float maxY = by + bh + lineRadius;
+
+	float dx = x2 - x1;
+	float dy = y2 - y1;
+	float t0 = 0.0f;
+	float t1 = 1.0f;
+
+	float p[4] = { -dx, dx, -dy, dy };
+	float q[4] = { x1 - minX, maxX - x1, y1 - minY, maxY - y1 };
+
+	for (int i = 0; i < 4; i++) {
+		if (fabsf(p[i]) < 1e-6f) {
+			if (q[i] < 0.0f) return false;
+		}
+		else {
+			float r = q[i] / p[i];
+			if (p[i] < 0.0f) {
+				if (r > t1) return false;
+				if (r > t0) t0 = r;
+			}
+			else {
+				if (r < t0) return false;
+				if (r < t1) t1 = r;
+			}
+		}
+	}
+	return t0 <= t1;
+}
+
+static bool LandOnPlatform(const Platform* plats, int platCount, float x, float w, float prevBottom, float newBottom, float* landY) {
+	for (int i = 0; i < platCount; i++) {
 		const Platform& p = plats[i];
 		if (x + w > p.x && x < p.x + p.w && prevBottom <= p.y && newBottom >= p.y) {
 			*landY = p.y;
@@ -172,6 +241,8 @@ static void DamageBossBreak(Boss& boss, int amount, int& shake) {
 		boss.vx = 0.0f;
 		boss.vy = 0.0f;
 		boss.state = 0; // 進行中の攻撃状態をリセット
+		boss.hidden = false;
+		boss.timeStopTimer = 0;
 		boss.flash = 15;
 		shake = 20;
 	}
@@ -183,13 +254,13 @@ static void FireEBullet(
 	float vx, float vy,
 	float r,
 	bool wave,
-	bool meteor = false
-)
-{
-	for (int i = 0; i < kMaxEBullets; i++)
-	{
-		if (!arr[i].active)
-		{
+	bool meteor = false,
+	bool unparryable = false,
+	bool useGravity = false,
+	bool spawnLaserOnLand = false
+) {
+	for (int i = 0; i < kMaxEBullets; i++) {
+		if (!arr[i].active) {
 			arr[i].active = true;
 			arr[i].x = x;
 			arr[i].y = y;
@@ -199,21 +270,105 @@ static void FireEBullet(
 			arr[i].wave = wave;
 			arr[i].reflected = false;
 			arr[i].meteor = meteor;
+			arr[i].unparryable = unparryable;
+			arr[i].useGravity = useGravity;
+			arr[i].spawnLaserOnLand = spawnLaserOnLand;
+			arr[i].waitTimeStop = false;
+			arr[i].aimX = 0.0f;
+			arr[i].aimY = 0.0f;
+			arr[i].launchSpeed = 0.0f;
 			return;
 		}
 	}
 }
 
-static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r)
-{
-	FireEBullet(arr, x, y, cosf(angle) * speed, sinf(angle) * speed, r, false);
+static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r, bool unparryable = false) {
+	FireEBullet(arr, x, y, cosf(angle) * speed, sinf(angle) * speed, r, false, false, unparryable);
 }
 
-//==================================================
+// 始点から角度方向に伸ばしたとき、地面(groundY)または画面端(0..kScreenW, 0)に当たる終点を計算
+static void CalcRayEnd(float sx, float sy, float angle, float groundY, float* outX, float* outY) {
+	float dx = cosf(angle);
+	float dy = sinf(angle);
+	float minT = 10000.0f;
+
+	if (dx > 1e-5f) {
+		float t = (kScreenW - sx) / dx;
+		if (t > 0.0f && t < minT) minT = t;
+	}
+	else if (dx < -1e-5f) {
+		float t = (0.0f - sx) / dx;
+		if (t > 0.0f && t < minT) minT = t;
+	}
+
+	if (dy > 1e-5f) {
+		float t = (groundY - sy) / dy;
+		if (t > 0.0f && t < minT) minT = t;
+	}
+	else if (dy < -1e-5f) {
+		float t = (0.0f - sy) / dy;
+		if (t > 0.0f && t < minT) minT = t;
+	}
+
+	*outX = sx + dx * minT;
+	*outY = sy + dy * minT;
+}
+
+static void SpawnLaser(
+	Laser* lasers,
+	float x1, float y1, float x2, float y2,
+	float width,
+	int warnTimer, int activeTimer,
+	bool spawnSpread = false,
+	bool movingVertical = false,
+	float vx = 0.0f,
+	bool airPhaseThrough = false
+) {
+	for (int i = 0; i < kMaxLasers; i++) {
+		if (!lasers[i].active) {
+			lasers[i].active = true;
+			lasers[i].x1 = x1;
+			lasers[i].y1 = y1;
+			lasers[i].x2 = x2;
+			lasers[i].y2 = y2;
+			lasers[i].width = width;
+			lasers[i].warnTimer = warnTimer;
+			lasers[i].activeTimer = activeTimer;
+			lasers[i].spawnSpread = spawnSpread;
+			lasers[i].spawnedSpread = false;
+			lasers[i].movingVertical = movingVertical;
+			lasers[i].vx = vx;
+			lasers[i].airPhaseThrough = airPhaseThrough;
+			return;
+		}
+	}
+}
+
+// ステージ3用：行動プールを補充（フェーズ1は7種、フェーズ2は8種）
+static void RefillStage3Patterns(Boss& boss) {
+	int total = (boss.phase == 2) ? 8 : 7;
+	boss.patternCount = total;
+	for (int i = 0; i < total; i++) {
+		boss.patternPool[i] = i;
+	}
+}
+
+// ステージ3用：リストからランダムに行動を1つ取り出して削除
+static int PopStage3Pattern(Boss& boss) {
+	if (boss.patternCount <= 0) {
+		RefillStage3Patterns(boss);
+	}
+	int idx = rand() % boss.patternCount;
+	int chosen = boss.patternPool[idx];
+	boss.patternPool[idx] = boss.patternPool[boss.patternCount - 1];
+	boss.patternCount--;
+	return chosen;
+}
+
+// ==================================================
 // ボスの種類ごとに初期化する関数
-//==================================================
-static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, int stage)
-{
+// ==================================================
+static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, float groundY, int stage) {
 	pl.x = 200.0f;
 	pl.y = groundY - 48.0f;
 	pl.vx = pl.vy = 0.0f;
@@ -241,9 +396,17 @@ static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, 
 	pl.airComboLeft = 1;
 
 	for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
+	for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
 
-	boss.w = 140.0f;
-	boss.h = 140.0f;
+	// ステージ3のボスのみサイズを 48 * 76 に変更
+	if (stage == 2) {
+		boss.w = 48.0f;
+		boss.h = 76.0f;
+	}
+	else {
+		boss.w = 140.0f;
+		boss.h = 140.0f;
+	}
 	boss.x = 1000.0f;
 	boss.y = groundY - boss.h;
 	boss.vx = boss.vy = 0.0f;
@@ -265,6 +428,24 @@ static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, 
 	boss.timer = 60;
 	boss.dir = -1;
 	boss.flash = 0;
+
+	// ステージ3用初期化
+	boss.hidden = false;
+	boss.phase = 1;
+	boss.patternCount = 0;
+	boss.currentPattern = -1;
+	boss.subState = 0;
+	boss.subTimer = 0;
+	boss.targetX = boss.x;
+	boss.targetY = boss.y;
+	boss.startX = boss.x;
+	boss.startY = boss.y;
+	boss.angleOffset = 0.0f;
+	boss.repeatCount = 0;
+	boss.timeStopTimer = 0;
+	if (stage == 2) {
+		RefillStage3Patterns(boss);
+	}
 }
 
 static void CancelAttack(Player& pl) {
@@ -363,6 +544,10 @@ static void HurtPlayer(Player& pl) {
 // Windowsアプリのエントリーポイント
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Novice::Initialize(kWindowTitle, kScreenW, kScreenH);
+
+	//↓フルスクリーン化するためのコード
+	//Novice::SetWindowMode(kFullscreen);
+
 	GetFont().Create();
 
 	char keys[256] = { 0 };
@@ -392,13 +577,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Player player;
 	EBullet ebullets[kMaxEBullets];
+	Laser lasers[kMaxLasers];
 	Boss boss;
 	DamagePopup popups[kMaxDamagePopups] = {};
 	int selectedStage = 0;
 	int currentStage = 0;
 	int bestFrames[kTotalStages] = { 0, 0, 0 };
 
-	ResetGame(player, ebullets, boss, groundY, selectedStage);
+	ResetGame(player, ebullets, lasers, boss, groundY, selectedStage);
 
 	Scene scene = kTitle;
 	int introTimer = 0;
@@ -413,6 +599,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Novice::GetHitKeyStateAll(keys);
 
 		frame++;
+
+		// ステージ3は3つの足場を削除し、地面(1つ)のみにする
+		int activePlatformNum = (currentStage == 2) ? 1 : kPlatformNum;
 
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
 
@@ -430,7 +619,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 			if (pressStart) {
 				currentStage = selectedStage;
-				ResetGame(player, ebullets, boss, groundY, currentStage);
+				ResetGame(player, ebullets, lasers, boss, groundY, currentStage);
 				for (int i = 0; i < kMaxDamagePopups; i++) popups[i].timer = 0;
 				introTimer = kIntroFrames;
 				playFrames = 0;
@@ -452,177 +641,181 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		else if (scene == kPlay) {
-			// ----- プレイヤー操作 -----
-			player.vx = 0.0f;
-			if (keys[DIK_A]) {
-				player.vx = -kMoveSpeed;
-				player.dir = -1;
-			}
-			if (keys[DIK_D]) {
-				player.vx = kMoveSpeed;
-				player.dir = 1;
-			}
+			bool isTimeStopped = (boss.type == 2 && boss.timeStopTimer > 0);
 
-			// ジャンプキーのトリガー・長押しによる高さ変更判定
-			bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
-			bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
-
-			if (player.dashCooldown > 0) player.dashCooldown--;
-			if (player.parryCooldown > 0) player.parryCooldown--;
-			if (player.parryTimer > 0) player.parryTimer--;
-			if (player.parryFlash > 0) player.parryFlash--;
-
-			if (jumpTrigger && player.dashTimer == 0) {
-				if (player.onGround) {
-					CancelAttack(player);
-					player.vy = kJumpPower;
-					player.onGround = false;
-					player.jumpCount = 1;
-				}
-				else if (player.jumpCount < 2) {
-					CancelAttack(player);
-					player.vy = kJumpPower * 0.9f;
-					player.jumpCount = 2;
-				}
-			}
-
-			// ジャンプ中、キーを離していたら上昇を強く抑える（小ジャンプ対応：調整幅拡大）
-			if (!player.onGround && player.vy < 0.0f && !jumpHeld) {
-				player.vy += 1.2f;
-			}
-
-			// ダッシュ：左シフト
-			bool dashTrigger = (preKeys[DIK_LSHIFT] == 0 && keys[DIK_LSHIFT] != 0);
-			if (dashTrigger && player.dashTimer == 0 && player.dashCooldown == 0 && player.parryTimer == 0 && (player.onGround || player.airDashLeft > 0)) {
-				CancelAttack(player);
-				player.dashTimer = 10;
-				player.dashCooldown = 35;
-				int d = player.dir;
-				if (keys[DIK_A]) d = -1;
-				if (keys[DIK_D]) d = 1;
-				player.dashDir = d;
-				player.dir = d;
-				if (!player.onGround) player.airDashLeft--;
-			}
-
-			// パリィ：右クリック (buttonNumber = 1)
-			if (Novice::IsTriggerMouse(1) && player.parryCooldown == 0 && player.dashTimer == 0) {
-				CancelAttack(player);
-				player.parryTimer = 12;
-				player.parryCooldown = 45;
-			}
-
-			// 近接攻撃：左クリック (buttonNumber = 0)
-			if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0) {
-				int adir = player.dir;
+			if (!isTimeStopped) {
+				// ----- プレイヤー操作（時間停止中は完全に停止し、解除後に中断箇所から再開） -----
+				player.vx = 0.0f;
 				if (keys[DIK_A]) {
-					adir = -1;
+					player.vx = -kMoveSpeed;
+					player.dir = -1;
 				}
-				else if (keys[DIK_D]) {
-					adir = 1;
-				}
-				else {
-					adir = (boss.x + boss.w * 0.5f > player.x + player.w * 0.5f) ? 1 : -1;
+				if (keys[DIK_D]) {
+					player.vx = kMoveSpeed;
+					player.dir = 1;
 				}
 
-				// コンボの継続判定（地上は8連、空中は4連）
-				bool canNext = player.atkHit && player.atkStep > 0 &&
-					((!player.atkAir && player.atkStep < 8) || (player.atkAir && player.atkStep < 4)) &&
-					(player.atkTimer <= 6 || player.comboWindow > 0);
+				// ジャンプキーのトリガー・長押しによる高さ変更判定
+				bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
+				bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
 
-				if (canNext) {
-					StartAttack(player, player.atkAir, player.atkStep + 1, adir);
-				}
-				else if (player.atkTimer == 0 && player.comboWindow == 0) {
+				if (player.dashCooldown > 0) player.dashCooldown--;
+				if (player.parryCooldown > 0) player.parryCooldown--;
+				if (player.parryTimer > 0) player.parryTimer--;
+				if (player.parryFlash > 0) player.parryFlash--;
+
+				if (jumpTrigger && player.dashTimer == 0) {
 					if (player.onGround) {
-						StartAttack(player, false, 1, adir);
+						CancelAttack(player);
+						player.vy = kJumpPower;
+						player.onGround = false;
+						player.jumpCount = 1;
 					}
-					else if (player.airComboLeft > 0) {
-						player.airComboLeft--;
-						StartAttack(player, true, 1, adir);
+					else if (player.jumpCount < 2) {
+						CancelAttack(player);
+						player.vy = kJumpPower * 0.9f;
+						player.jumpCount = 2;
 					}
 				}
-			}
 
-			if (player.atkTimer > 0) {
-				player.atkTimer--;
-				if (player.atkTimer == 0) {
-					if (player.atkAir && player.atkHit && player.atkStep < 4) {
-						player.comboWindow = 22;
+				// ジャンプ中、キーを離していたら上昇を強く抑える（小ジャンプ対応：調整幅拡大）
+				if (!player.onGround && player.vy < 0.0f && !jumpHeld) {
+					player.vy += 1.2f;
+				}
+
+				// ダッシュ：左シフト
+				bool dashTrigger = (preKeys[DIK_LSHIFT] == 0 && keys[DIK_LSHIFT] != 0);
+				if (dashTrigger && player.dashTimer == 0 && player.dashCooldown == 0 && player.parryTimer == 0 && (player.onGround || player.airDashLeft > 0)) {
+					CancelAttack(player);
+					player.dashTimer = 10;
+					player.dashCooldown = 35;
+					int d = player.dir;
+					if (keys[DIK_A]) d = -1;
+					if (keys[DIK_D]) d = 1;
+					player.dashDir = d;
+					player.dir = d;
+					if (!player.onGround) player.airDashLeft--;
+				}
+
+				// パリィ：右クリック (buttonNumber = 1)
+				if (Novice::IsTriggerMouse(1) && player.parryCooldown == 0 && player.dashTimer == 0) {
+					CancelAttack(player);
+					player.parryTimer = 12;
+					player.parryCooldown = 45;
+				}
+
+				// 近接攻撃：左クリック (buttonNumber = 0)
+				if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0) {
+					int adir = player.dir;
+					if (keys[DIK_A]) {
+						adir = -1;
 					}
-					else if (!player.atkAir && player.atkHit && player.atkStep < 8) {
-						player.comboWindow = 22;
+					else if (keys[DIK_D]) {
+						adir = 1;
 					}
 					else {
-						player.atkStep = 0;
+						adir = (boss.x + boss.w * 0.5f > player.x + player.w * 0.5f) ? 1 : -1;
+					}
+
+					// コンボの継続判定（地上は8連、空中は4連）
+					bool canNext = player.atkHit && player.atkStep > 0 &&
+						((!player.atkAir && player.atkStep < 8) || (player.atkAir && player.atkStep < 4)) &&
+						(player.atkTimer <= 6 || player.comboWindow > 0);
+
+					if (canNext) {
+						StartAttack(player, player.atkAir, player.atkStep + 1, adir);
+					}
+					else if (player.atkTimer == 0 && player.comboWindow == 0) {
+						if (player.onGround) {
+							StartAttack(player, false, 1, adir);
+						}
+						else if (player.airComboLeft > 0) {
+							player.airComboLeft--;
+							StartAttack(player, true, 1, adir);
+						}
 					}
 				}
-			}
-			else if (player.comboWindow > 0) {
-				player.comboWindow--;
-				if (player.comboWindow == 0) player.atkStep = 0;
-			}
 
-			bool hover = false;
-			if (player.atkTimer > 0) {
-				if (!player.atkAir) {
-					// 攻撃中の前進移動仕様を削除（その場で停止）
-					player.vx = 0.0f;
+				if (player.atkTimer > 0) {
+					player.atkTimer--;
+					if (player.atkTimer == 0) {
+						if (player.atkAir && player.atkHit && player.atkStep < 4) {
+							player.comboWindow = 22;
+						}
+						else if (!player.atkAir && player.atkHit && player.atkStep < 8) {
+							player.comboWindow = 22;
+						}
+						else {
+							player.atkStep = 0;
+						}
+					}
 				}
-				else {
+				else if (player.comboWindow > 0) {
+					player.comboWindow--;
+					if (player.comboWindow == 0) player.atkStep = 0;
+				}
+
+				bool hover = false;
+				if (player.atkTimer > 0) {
+					if (!player.atkAir) {
+						player.vx = 0.0f;
+					}
+					else {
+						player.vx *= 0.4f;
+						hover = true;
+					}
+				}
+				else if (player.comboWindow > 0) {
 					player.vx *= 0.4f;
 					hover = true;
 				}
-			}
-			else if (player.comboWindow > 0) {
-				player.vx *= 0.4f;
-				hover = true;
+
+				bool dashing = player.dashTimer > 0;
+				if (dashing) {
+					player.vx = player.dashDir * 18.0f;
+					player.vy = 0.0f;
+					player.dashTimer--;
+				}
+				else if (hover) {
+					player.vy = 0.0f;
+				}
+				player.x += player.vx;
+				player.x = Clamp(player.x, 0.0f, kScreenW - player.w);
+
+				float prevBottom = player.y + player.h;
+				if (!dashing && !hover) player.vy += kGravity;
+				if (player.vy > kMaxFall) player.vy = kMaxFall;
+				player.y += player.vy;
+				player.onGround = false;
+
+				float landY;
+				if (player.vy >= 0.0f && LandOnPlatform(platforms, activePlatformNum, player.x, player.w, prevBottom, player.y + player.h, &landY)) {
+					player.y = landY - player.h;
+					player.vy = 0.0f;
+					player.onGround = true;
+					player.jumpCount = 0;
+					player.airDashLeft = 1;
+					player.airComboLeft = 1;
+					if (player.atkAir) CancelAttack(player);
+				}
+				if (!player.onGround && player.jumpCount == 0) player.jumpCount = 1;
+
+				if (player.invincible > 0) player.invincible--;
 			}
 
-			bool dashing = player.dashTimer > 0;
-			if (dashing) {
-				player.vx = player.dashDir * 18.0f;
-				player.vy = 0.0f;
-				player.dashTimer--;
-			}
-			else if (hover) {
-				player.vy = 0.0f;
-			}
-			player.x += player.vx;
-			player.x = Clamp(player.x, 0.0f, kScreenW - player.w);
-
-			float prevBottom = player.y + player.h;
-			if (!dashing && !hover) player.vy += kGravity;
-			if (player.vy > kMaxFall) player.vy = kMaxFall;
-			player.y += player.vy;
-			player.onGround = false;
-
-			float landY;
-			if (player.vy >= 0.0f && LandOnPlatform(platforms, player.x, player.w, prevBottom, player.y + player.h, &landY)) {
-				player.y = landY - player.h;
-				player.vy = 0.0f;
-				player.onGround = true;
-				player.jumpCount = 0;
-				player.airDashLeft = 1;
-				player.airComboLeft = 1;
-				if (player.atkAir) CancelAttack(player);
-			}
-			if (!player.onGround && player.jumpCount == 0) player.jumpCount = 1;
-
-			if (player.invincible > 0) player.invincible--;
 			if (boss.flash > 0) boss.flash--;
 			if (shake > 0) shake--;
-			playFrames++;
+			if (!isTimeStopped) playFrames++;
 			for (int i = 0; i < kMaxDamagePopups; i++) {
 				if (popups[i].timer > 0) popups[i].timer--;
 			}
 
-			// 近接攻撃のヒット判定
-			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
+			// 近接攻撃のヒット判定（時間停止中はプレイヤーも停止しているため実行しない）
+			if (!isTimeStopped && player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
 				float ax, ay, aw, ah;
 				MeleeBox(player, &ax, &ay, &aw, &ah);
 
-				if (introTimer == 0 && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
+				if (introTimer == 0 && !boss.hidden && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 					bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
 					player.atkHit = true;
 
@@ -644,7 +837,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				for (int i = 0; i < kMaxEBullets; i++) {
 					EBullet& eb = ebullets[i];
-					if (!eb.active || eb.wave || eb.reflected) continue;
+					if (!eb.active || eb.wave || eb.reflected || eb.unparryable) continue;
 					if (HitBox(ax, ay, aw, ah, eb.x - eb.r, eb.y - eb.r, eb.r * 2.0f, eb.r * 2.0f)) {
 						eb.active = false;
 					}
@@ -664,6 +857,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				// ブレイク中の行動停止処理
 				if (boss.isBroken) {
 					boss.breakTimer--;
+					boss.hidden = false;
+					boss.timeStopTimer = 0;
 					// 空中でブレイクした場合は地面まで落下させる
 					if (boss.y + boss.h < groundY) {
 						boss.vy += kGravity;
@@ -678,7 +873,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						boss.isBroken = false;
 						boss.breakGauge = boss.maxBreakGauge;
 						boss.state = 0;
-						boss.timer = 60;
+						boss.timer = (boss.type == 2) ? 120 : 60;
 					}
 				}
 				else {
@@ -691,20 +886,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							boss.timer--;
 							if (boss.timer <= 0) {
 								int pick = rand() % 3;
-
-								if (pick == 0)
-								{
+								if (pick == 0) {
 									boss.state = 1;
 									boss.timer = 50;
 								}
-								else if (pick == 1)
-								{
+								else if (pick == 1) {
 									boss.state = 2;
 									boss.timer = 70;
 								}
-								else
-								{
-									// ステージ１の流星群攻撃のチャージ
+								else {
 									boss.state = 3;
 									boss.timer = 100;
 								}
@@ -736,21 +926,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 1.5f;
 							boss.timer--;
-							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0)
-							{
+							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0) {
 								float startX = static_cast<float>(rand() % kScreenW);
 								float targetX = static_cast<float>(rand() % kScreenW);
 								float meteorVx = (targetX - startX) / 55.0f;
-								FireEBullet(
-									ebullets,
-									startX,
-									-40.0f,
-									meteorVx,
-									10.0f,
-									15.0f,
-									false,
-									true
-								);
+								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true);
 							}
 							if (boss.timer <= 0) {
 								boss.state = 0;
@@ -814,115 +994,545 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						}
 					}
 					else {
-						switch (boss.state) {
-						case 0:
+						// ==================================================
+						// ステージ3 ボスAI（フェーズ1 & フェーズ2）
+						// ==================================================
+						// フェーズ移行チェック（HP 60%未満でフェーズ2へ強制移行＆実行中の行動中断）
+						if (boss.phase == 1 && boss.hp < static_cast<int>(boss.maxHp * 0.6f)) {
+							boss.phase = 2;
+							boss.hidden = false;
+							boss.vx = 0.0f;
+							boss.vy = 0.0f;
+							boss.y = groundY - boss.h;
+							boss.state = 0;
+							boss.timer = 90; // 移行直後の短い静止
+							boss.currentPattern = -1;
+							boss.timeStopTimer = 0;
+							boss.flash = 20;
+							shake = 18;
+							// 進行中のレーザーをキャンセル
+							for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
+							// 行動リストをフェーズ2用に再構築
+							RefillStage3Patterns(boss);
+						}
+
+						if (boss.state == 0) {
+							// 行動と行動の間：地面に着地し、2秒（120フレーム）静止
+							boss.hidden = false;
+							boss.vx = 0.0f;
+							boss.vy = 0.0f;
+							boss.y = groundY - boss.h;
 							boss.dir = (pcx > bcx) ? 1 : -1;
-							boss.x += boss.dir * 2.0f;
-							boss.y = 400.0f + sinf(frame * 0.08f) * 120.0f;
 							boss.timer--;
 							if (boss.timer <= 0) {
-								int pick = rand() % 3;
-								if (pick == 0) boss.state = 1;
-								else if (pick == 1) boss.state = 2;
-								else boss.state = 3;
-								boss.timer = 60;
+								boss.currentPattern = PopStage3Pattern(boss);
+								boss.state = 1;
+								boss.subState = 0;
+								boss.subTimer = 0;
+								boss.repeatCount = 0;
 							}
-							break;
-						case 1:
-							boss.timer--;
-							if (boss.timer == 30) {
-								for (int i = 0; i < 12; i++) {
-									float ang = i * (2.0f * kPi / 12.0f);
-									FireAngle(ebullets, bcx, bcy, ang, 5.5f, 10.0f);
-								}
-							}
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
-							break;
-						case 2:
-							boss.timer--;
-							if (boss.timer % 10 == 0) {
-								FireAngle(ebullets, bcx, bcy, aim, 8.0f, 12.0f);
-							}
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 80; }
-							break;
-						case 3:
-							boss.timer--;
-							if (boss.timer == 30) {
-								boss.x = kScreenW * 0.5f - boss.w * 0.5f;
-								shake = 10;
-								for (int i = 0; i < 16; i++) {
-									float ang = i * (2.0f * kPi / 16.0f);
-									FireAngle(ebullets, bcx, bcy, ang, 6.0f, 8.0f);
-								}
-							}
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
-							break;
-						case 4:
-							boss.timer--;
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-							break;
 						}
-						if (boss.type == 2 && boss.state != 3) {
-							boss.y = Clamp(boss.y, 200.0f, groundY - boss.h);
+						else if (boss.state == 1) {
+							switch (boss.currentPattern) {
+							case 0:
+								// パターン0: 画面から消えたあと、プレイヤーの背後から出現し真っすぐ突撃してくる
+								if (boss.subState == 0) {
+									boss.hidden = true;
+									boss.subTimer++;
+									if (boss.subTimer >= 35) {
+										// プレイヤーの背後に出現
+										float behindOffset = 150.0f;
+										float spawnCx = pcx - player.dir * behindOffset;
+										if (spawnCx < 40.0f || spawnCx > kScreenW - 40.0f) {
+											spawnCx = pcx + player.dir * behindOffset;
+										}
+										boss.x = Clamp(spawnCx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
+										boss.y = groundY - boss.h;
+										boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+										boss.hidden = false;
+										boss.flash = 8;
+										boss.subState = 1;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 1) {
+									// 出現後の短い予備動作
+									boss.subTimer++;
+									if (boss.subTimer >= 18) {
+										boss.subState = 2;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 2) {
+									// 真っすぐ突撃
+									boss.x += boss.dir * 22.0f;
+									boss.subTimer++;
+									if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.subTimer >= 35) {
+										shake = 10;
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+
+							case 1:
+								// パターン1: 画面から消えたあと、プレイヤーの上部から出現し、高速で落下してくる
+								if (boss.subState == 0) {
+									boss.hidden = true;
+									boss.subTimer++;
+									if (boss.subTimer >= 35) {
+										boss.x = Clamp(pcx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
+										boss.y = 70.0f;
+										boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+										boss.hidden = false;
+										boss.flash = 8;
+										boss.subState = 1;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 1) {
+									// 上空での予備動作
+									boss.subTimer++;
+									if (boss.subTimer >= 20) {
+										boss.subState = 2;
+										boss.vy = 26.0f;
+									}
+								}
+								else if (boss.subState == 2) {
+									// 高速落下
+									boss.y += boss.vy;
+									if (boss.y + boss.h >= groundY) {
+										boss.y = groundY - boss.h;
+										boss.vy = 0.0f;
+										shake = 14;
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+
+							case 2:
+								// パターン2: 地面をまっ直ぐ移動する弾2を左右から放ちながら、ランダムな位置に縦向きのレーザーを出現させる。同時に、プレイヤーに向けて弾1を放つ
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								boss.subTimer++;
+								// 地面をまっすぐ移動する弾2を左右から放つ
+								if (boss.subTimer % 45 == 1) {
+									FireEBullet(ebullets, 10.0f, groundY - 14.0f, 7.0f, 0.0f, 12.0f, false, false, true);
+									FireEBullet(ebullets, kScreenW - 10.0f, groundY - 14.0f, -7.0f, 0.0f, 12.0f, false, false, true);
+								}
+								// ランダムな位置に縦向きのレーザーを出現させる
+								if (boss.subTimer % 30 == 10) {
+									float lx = static_cast<float>(60 + rand() % (kScreenW - 120));
+									SpawnLaser(lasers, lx, 0.0f, lx, groundY, 26.0f, 40, 15, false);
+								}
+								// 同時にプレイヤーに向けて弾1を放つ
+								if (boss.subTimer % 36 == 18) {
+									FireAngle(ebullets, bcx, bcy, aim, 8.0f, 10.0f, false);
+								}
+								if (boss.subTimer >= 210) {
+									boss.state = 0;
+									boss.timer = 120;
+								}
+								break;
+
+							case 3:
+								// パターン3: 空中のランダムな位置へと移動し、プレイヤーの位置に向けてレーザーを放つのを繰り返す。着弾地点から16方向拡散（弾1と弾2が交互）
+								if (boss.subState == 0) {
+									// 移動先決定
+									boss.startX = boss.x;
+									boss.startY = boss.y;
+									boss.targetX = static_cast<float>(100 + rand() % (kScreenW - 200));
+									boss.targetY = static_cast<float>(90 + rand() % 220);
+									boss.subState = 1;
+									boss.subTimer = 0;
+								}
+								else if (boss.subState == 1) {
+									// 空中移動（20フレーム）
+									boss.subTimer++;
+									float t = boss.subTimer / 20.0f;
+									boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+									boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+									boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+									if (boss.subTimer >= 20) {
+										// プレイヤーの位置に向けてレーザー予約
+										float curCx = boss.x + boss.w * 0.5f;
+										float curCy = boss.y + boss.h * 0.5f;
+										float ang = atan2f(pcy - curCy, pcx - curCx);
+										float endX, endY;
+										CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
+										SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 35, 16, true);
+										boss.subState = 2;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 2) {
+									// 発射後の硬直
+									boss.subTimer++;
+									if (boss.subTimer >= 52) {
+										boss.repeatCount++;
+										if (boss.repeatCount >= 4) {
+											// 地上へ戻る
+											boss.y = groundY - boss.h;
+											boss.state = 0;
+											boss.timer = 120;
+										}
+										else {
+											boss.subState = 0;
+										}
+									}
+								}
+								break;
+
+							case 4:
+								// パターン4: 空中の画面中央へ移動。上方向から60~-60度ずれたランダムな方向にレーザーを放ちまくる（着弾地点から16方向交互拡散）
+								if (boss.subState == 0) {
+									boss.startX = boss.x;
+									boss.startY = boss.y;
+									boss.targetX = kScreenW * 0.5f - boss.w * 0.5f;
+									boss.targetY = 180.0f;
+									boss.subState = 1;
+									boss.subTimer = 0;
+								}
+								else if (boss.subState == 1) {
+									boss.subTimer++;
+									float t = boss.subTimer / 25.0f;
+									boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+									boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+									if (boss.subTimer >= 25) {
+										boss.subState = 2;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 2) {
+									boss.subTimer++;
+									if (boss.subTimer % 28 == 1 && boss.subTimer <= 170) {
+										float curCx = boss.x + boss.w * 0.5f;
+										float curCy = boss.y + boss.h * 0.5f;
+										// 上方向(-90度 = -kPi/2)から -60度 ~ +60度 ずれたランダム方向
+										float degOffset = static_cast<float>((rand() % 121) - 60);
+										float ang = -kPi * 0.5f + degOffset * (kPi / 180.0f);
+										float endX, endY;
+										CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
+										SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 30, 14, true);
+									}
+									if (boss.subTimer >= 210) {
+										boss.y = groundY - boss.h;
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+
+							case 5:
+								// パターン5: 空中の端へと移動。画面を右から左、左から右へと移動しながら、重力に従って落ちる弾1と弾2（着弾地点から縦レーザー）をばら撒く
+								if (boss.subState == 0) {
+									boss.startX = boss.x;
+									boss.startY = boss.y;
+									boss.targetX = kScreenW - boss.w - 40.0f;
+									boss.targetY = 120.0f;
+									boss.subState = 1;
+									boss.subTimer = 0;
+								}
+								else if (boss.subState == 1) {
+									boss.subTimer++;
+									float t = boss.subTimer / 25.0f;
+									boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+									boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+									if (boss.subTimer >= 25) {
+										boss.subState = 2;
+										boss.subTimer = 0;
+										boss.dir = -1; // 右から左へ
+									}
+								}
+								else if (boss.subState == 2) {
+									// 右から左へ移動しながらばら撒き
+									boss.x -= 11.0f;
+									boss.subTimer++;
+									if (boss.subTimer % 12 == 0) {
+										bool isBullet2 = ((boss.subTimer / 12) % 2 == 0);
+										float bvx = static_cast<float>((rand() % 5) - 2);
+										FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
+									}
+									if (boss.x <= 40.0f) {
+										boss.x = 40.0f;
+										boss.subState = 3;
+										boss.subTimer = 0;
+										boss.dir = 1; // 左から右へ
+									}
+								}
+								else if (boss.subState == 3) {
+									// 左から右へ移動しながらばら撒き
+									boss.x += 11.0f;
+									boss.subTimer++;
+									if (boss.subTimer % 12 == 0) {
+										bool isBullet2 = ((boss.subTimer / 12) % 2 == 0);
+										float bvx = static_cast<float>((rand() % 5) - 2);
+										FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
+									}
+									if (boss.x >= kScreenW - boss.w - 40.0f) {
+										boss.y = groundY - boss.h;
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+
+							case 6:
+								// パターン6: 空中のX980地点に移動。32方向に連続して弾をばら撒く（1回毎に5度ズレ、弾1と弾2が交互）。同時に画面右端から移動してくる縦レーザー（プレイヤーが地面にいない時のみ半透明＆当たり判定消滅）
+								if (boss.subState == 0) {
+									boss.startX = boss.x;
+									boss.startY = boss.y;
+									boss.targetX = 980.0f;
+									boss.targetY = 200.0f;
+									boss.subState = 1;
+									boss.subTimer = 0;
+								}
+								else if (boss.subState == 1) {
+									boss.subTimer++;
+									float t = boss.subTimer / 25.0f;
+									boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+									boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+									if (boss.subTimer >= 25) {
+										boss.subState = 2;
+										boss.subTimer = 0;
+										boss.angleOffset = 0.0f;
+										// 画面右端から移動してくる特殊縦レーザーを発射
+										SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 30, 260, false, true, -4.5f, true);
+									}
+								}
+								else if (boss.subState == 2) {
+									boss.dir = -1;
+									boss.subTimer++;
+									if (boss.subTimer % 28 == 1 && boss.subTimer <= 220) {
+										float curCx = boss.x + boss.w * 0.5f;
+										float curCy = boss.y + boss.h * 0.5f;
+										for (int i = 0; i < 32; i++) {
+											float ang = boss.angleOffset + i * (2.0f * kPi / 32.0f);
+											bool isBullet2 = (i % 2 == 1); // 弾1と弾2が交互
+											FireAngle(ebullets, curCx, curCy, ang, 5.2f, 8.0f, isBullet2);
+										}
+										// 一度撒く度に次放つ時の起点方向が5度ズレる
+										boss.angleOffset += 5.0f * (kPi / 180.0f);
+									}
+									if (boss.subTimer >= 260) {
+										boss.y = groundY - boss.h;
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+
+							case 7:
+								// パターン7（フェーズ2限定）: 時間停止をし、プレイヤーの周囲に四つの弾2を設置する。時間停止が解除された直後、弾2はプレイヤーに向けて一斉に動きだす
+								if (boss.subState == 0) {
+									// 時間停止発動（90フレーム = 1.5秒）
+									boss.timeStopTimer = 90;
+									boss.subState = 1;
+									boss.subTimer = 0;
+									shake = 12;
+
+									// プレイヤーの周囲（上下左右）に4つの弾2を設置
+									const float dist = 120.0f;
+									const float offsets[4][2] = {
+										{ 0.0f, -dist },
+										{ 0.0f,  dist },
+										{ -dist, 0.0f },
+										{  dist, 0.0f }
+									};
+									for (int k = 0; k < 4; k++) {
+										float bx = Clamp(pcx + offsets[k][0], 20.0f, kScreenW - 20.0f);
+										float by = Clamp(pcy + offsets[k][1], 20.0f, groundY - 12.0f);
+										for (int i = 0; i < kMaxEBullets; i++) {
+											if (!ebullets[i].active) {
+												ebullets[i].active = true;
+												ebullets[i].x = bx;
+												ebullets[i].y = by;
+												ebullets[i].vx = 0.0f;
+												ebullets[i].vy = 0.0f;
+												ebullets[i].r = 11.0f;
+												ebullets[i].wave = false;
+												ebullets[i].reflected = false;
+												ebullets[i].meteor = false;
+												ebullets[i].unparryable = true; // 弾2
+												ebullets[i].useGravity = false;
+												ebullets[i].spawnLaserOnLand = false;
+												ebullets[i].waitTimeStop = true;
+												ebullets[i].aimX = pcx;
+												ebullets[i].aimY = pcy;
+												ebullets[i].launchSpeed = 11.5f;
+												break;
+											}
+										}
+									}
+								}
+								else if (boss.subState == 1) {
+									boss.timeStopTimer--;
+									// プレイヤーの現在位置を追尾更新（解除時のプレイヤー位置へ向かう）
+									for (int i = 0; i < kMaxEBullets; i++) {
+										if (ebullets[i].active && ebullets[i].waitTimeStop) {
+											ebullets[i].aimX = pcx;
+											ebullets[i].aimY = pcy;
+										}
+									}
+									if (boss.timeStopTimer <= 0) {
+										boss.timeStopTimer = 0;
+										// 時間停止解除直後：弾2がプレイヤーに向けて一斉に動き出す
+										for (int i = 0; i < kMaxEBullets; i++) {
+											if (ebullets[i].active && ebullets[i].waitTimeStop) {
+												ebullets[i].waitTimeStop = false;
+												float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
+												ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
+												ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
+											}
+										}
+										boss.subState = 2;
+										boss.subTimer = 0;
+									}
+								}
+								else if (boss.subState == 2) {
+									boss.subTimer++;
+									if (boss.subTimer >= 40) {
+										boss.state = 0;
+										boss.timer = 120;
+									}
+								}
+								break;
+							}
+						}
+						else if (boss.state == 4) {
+							boss.timer--;
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 120; }
 						}
 					}
 				}
 
 				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
-				// ボスの弾の更新とパリィ・被弾判定
-				for (int i = 0; i < kMaxEBullets; i++) {
-					EBullet& b = ebullets[i];
-					if (!b.active) continue;
-					b.x += b.vx;
-					b.y += b.vy;
-					if (b.x < -60.0f || b.x > kScreenW + 60.0f || b.y < -60.0f || b.y > kScreenH + 60.0f) {
-						b.active = false;
-						continue;
-					}
-					if (b.reflected) {
-						if (HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
-							b.active = false;
-							// パリィ威力は25倍 (4 * 25 = 100)、ブレイク中はさらに1.5倍
-							int baseParryDmg = 100;
-							int dmg = boss.isBroken ? static_cast<int>(baseParryDmg * 1.5f) : baseParryDmg;
-							boss.hp -= dmg;
-							SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
 
-							// パリィした弾がボスに当たった時のみブレイクゲージを削る
-							DamageBossBreak(boss, 150, shake);
+				// ==================================================
+				// レーザーの更新と当たり判定（時間停止中は停止）
+				// ==================================================
+				if (!isTimeStopped) {
+					for (int i = 0; i < kMaxLasers; i++) {
+						Laser& lz = lasers[i];
+						if (!lz.active) continue;
 
-							boss.flash = 10;
-							shake = 8;
-						}
-						continue;
-					}
-					if (player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
-						if (b.wave) {
-							b.active = false;
+						if (lz.warnTimer > 0) {
+							lz.warnTimer--;
+							if (lz.warnTimer == 0 && lz.spawnSpread && !lz.spawnedSpread) {
+								// レーザー照射開始時：着弾地点を起点に16方向に拡散する弾を放つ（弾1と弾2が交互）
+								lz.spawnedSpread = true;
+								for (int k = 0; k < 16; k++) {
+									float ang = k * (2.0f * kPi / 16.0f);
+									bool isBullet2 = (k % 2 == 1);
+									FireAngle(ebullets, lz.x2, lz.y2, ang, 5.5f, 8.5f, isBullet2);
+								}
+							}
 						}
 						else {
-							b.reflected = true;
-							float ang = atan2f(bcy - b.y, bcx - b.x);
-							b.vx = cosf(ang) * 14.0f;
-							b.vy = sinf(ang) * 14.0f;
-							b.r = 14.0f;
-						}
-						// ※ここでのブレイクゲージ削り処理を削除
+							if (lz.movingVertical) {
+								lz.x1 += lz.vx;
+								lz.x2 += lz.vx;
+								if (lz.x1 < -50.0f || lz.x1 > kScreenW + 50.0f) {
+									lz.active = false;
+									continue;
+								}
+							}
+							lz.activeTimer--;
+							if (lz.activeTimer <= 0) {
+								lz.active = false;
+								continue;
+							}
 
-						player.parryCooldown = 0;
-						player.invincible = 20;
-						player.parryFlash = 10;
-						shake = 6;
-					}
-					else if (player.invincible == 0 && player.dashTimer == 0 &&
-						HitBox(player.x, player.y, player.w, player.h, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
-						HurtPlayer(player);
-						if (!b.wave) b.active = false;
+							// 特殊縦レーザー判定：プレイヤーが地面についていない時のみ半透明となり、当たり判定が消滅する
+							bool canHit = true;
+							if (lz.airPhaseThrough && !player.onGround) {
+								canHit = false;
+							}
+
+							// レーザーはパリィ不可。ダッシュ無敵以外の時に当たるとダメージ
+							if (canHit && player.invincible == 0 && player.dashTimer == 0) {
+								if (HitLineBox(lz.x1, lz.y1, lz.x2, lz.y2, lz.width * 0.5f, player.x, player.y, player.w, player.h)) {
+									HurtPlayer(player);
+								}
+							}
+						}
 					}
 				}
 
-				// ボス本体との当たり判定（ブレイク中は接触ダメージなし）
-				if (!boss.isBroken && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
+				// ==================================================
+				// ボスの弾の更新とパリィ・被弾判定（時間停止中は停止）
+				// ==================================================
+				if (!isTimeStopped) {
+					for (int i = 0; i < kMaxEBullets; i++) {
+						EBullet& b = ebullets[i];
+						if (!b.active) continue;
+
+						if (b.useGravity) {
+							b.vy += kGravity * 0.45f;
+						}
+
+						b.x += b.vx;
+						b.y += b.vy;
+
+						// 重力弾2の着弾処理（着弾地点から縦方向にレーザーを放つ）
+						if (b.spawnLaserOnLand && b.y >= groundY) {
+							SpawnLaser(lasers, b.x, 0.0f, b.x, groundY, 26.0f, 30, 15, false);
+							b.active = false;
+							continue;
+						}
+
+						if (b.x < -60.0f || b.x > kScreenW + 60.0f || b.y < -120.0f || b.y > kScreenH + 60.0f) {
+							b.active = false;
+							continue;
+						}
+
+						if (b.reflected) {
+							if (!boss.hidden && HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
+								b.active = false;
+								// パリィ威力は25倍 (4 * 25 = 100)、ブレイク中はさらに1.5倍
+								int baseParryDmg = 100;
+								int dmg = boss.isBroken ? static_cast<int>(baseParryDmg * 1.5f) : baseParryDmg;
+								boss.hp -= dmg;
+								SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
+
+								// パリィした弾がボスに当たった時のみブレイクゲージを削る
+								DamageBossBreak(boss, 150, shake);
+
+								boss.flash = 10;
+								shake = 8;
+							}
+							continue;
+						}
+
+						// パリィ判定：弾1（!b.unparryable）のみパリィ可能。弾2（b.unparryable）はパリィ不可
+						if (!b.unparryable && player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
+							if (b.wave) {
+								b.active = false;
+							}
+							else {
+								b.reflected = true;
+								b.useGravity = false;
+								float ang = atan2f(bcy - b.y, bcx - b.x);
+								b.vx = cosf(ang) * 14.0f;
+								b.vy = sinf(ang) * 14.0f;
+								b.r = 14.0f;
+							}
+
+							player.parryCooldown = 0;
+							player.invincible = 20;
+							player.parryFlash = 10;
+							shake = 6;
+						}
+						else if (player.invincible == 0 && player.dashTimer == 0 &&
+							HitBox(player.x, player.y, player.w, player.h, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
+							HurtPlayer(player);
+							if (!b.wave) b.active = false;
+						}
+					}
+				}
+
+				// ボス本体との当たり判定（ステージ3は接触ダメージ・接触パリィ共に無効）
+				if (boss.type != 2 && !boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
 					if (player.parryTimer > 0) {
 						boss.state = 4;
 						boss.timer = 70;
@@ -943,6 +1553,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (boss.hp <= 0) {
 				boss.hp = 0;
 				for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
+				for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
 				if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
 					bestFrames[currentStage] = playFrames;
 				}
@@ -964,12 +1575,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// アニメーション更新処理
 		//==========================================
 		meteorAnimationTimer++;
-		if (meteorAnimationTimer >= kMeteorAnimationSpeed)
-		{
+		if (meteorAnimationTimer >= kMeteorAnimationSpeed) {
 			meteorAnimationTimer = 0;
 			meteorAnimationFrame++;
-			if (meteorAnimationFrame >= 4)
-			{
+			if (meteorAnimationFrame >= 4) {
 				meteorAnimationFrame = 0;
 			}
 		}
@@ -987,7 +1596,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 
-		for (int i = 0; i < kPlatformNum; i++) {
+		// 時間停止中の背景色調演出
+		if (scene == kPlay && boss.type == 2 && boss.timeStopTimer > 0) {
+			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x0A0518CC, kFillModeSolid);
+		}
+
+		for (int i = 0; i < activePlatformNum; i++) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
 			Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
 		}
@@ -1009,8 +1623,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			float drawY = boss.y;
 			// ブレイク中は少し姿勢を低くする
 			if (boss.isBroken) {
-				drawH = boss.h - 20.0f;
-				drawY = boss.y + 20.0f;
+				float crouch = (boss.type == 2) ? 10.0f : 20.0f;
+				drawH = boss.h - crouch;
+				drawY = boss.y + crouch;
 			}
 			else if (boss.type == 0 && boss.state == 3) {
 				drawH = boss.h - 15.0f;
@@ -1022,24 +1637,36 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				drawY = boss.y + 30.0f;
 			}
 
-			Rect(boss.x, drawY, boss.w, drawH, bodyColor);
+			if (!boss.hidden) {
+				Rect(boss.x, drawY, boss.w, drawH, bodyColor);
 
-			float eyeY = drawY + 40.0f;
-			float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
-			Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-			Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-			Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
-			Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+				if (boss.type == 2) {
+					// ステージ3（48x76）専用の目と帽子サイズ
+					float eyeY = drawY + 20.0f;
+					float eyeX = (boss.dir == 1) ? boss.x + boss.w - 26.0f : boss.x + 6.0f;
+					Rect(eyeX, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
+					Rect(eyeX + 12.0f, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
+					Rect(eyeX + 2.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
+					Rect(eyeX + 14.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
 
-			if (boss.type == 0) {
-				Rect(boss.x + boss.w * 0.5f - 5.0f, drawY - 30.0f, 10.0f, 30.0f, 0xCCCCCCFF);
-			}
-			else if (boss.type == 1) {
-				Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
-				Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
-			}
-			else {
-				Rect(boss.x + boss.w * 0.5f - 15.0f, drawY - 35.0f, 30.0f, 35.0f, 0xDD99FFFF);
+					Rect(boss.x + boss.w * 0.5f - 8.0f, drawY - 18.0f, 16.0f, 18.0f, 0xDD99FFFF);
+				}
+				else {
+					float eyeY = drawY + 40.0f;
+					float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
+					Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+					Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+					Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+					Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+
+					if (boss.type == 0) {
+						Rect(boss.x + boss.w * 0.5f - 5.0f, drawY - 30.0f, 10.0f, 30.0f, 0xCCCCCCFF);
+					}
+					else if (boss.type == 1) {
+						Rect(boss.x + 10.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+						Rect(boss.x + boss.w - 30.0f, drawY - 20.0f, 20.0f, 20.0f, 0xCCCCCCFF);
+					}
+				}
 			}
 
 			// ブレイク中の頭上テキスト
@@ -1057,7 +1684,62 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Circle(centerX, centerY, effectSize, 0xAA66FF55);
 				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "CHARGING...");
 			}
+			else if (boss.type == 2 && boss.timeStopTimer > 0) {
+				PrintfCenter(640, 180, "TIME STOP!!");
+			}
 
+			// ---- レーザー描画 ----
+			for (int i = 0; i < kMaxLasers; i++) {
+				const Laser& lz = lasers[i];
+				if (!lz.active) continue;
+
+				if (lz.warnTimer > 0) {
+					// 予告線
+					Novice::DrawLine(
+						static_cast<int>(lz.x1) + gShakeX,
+						static_cast<int>(lz.y1) + gShakeY,
+						static_cast<int>(lz.x2) + gShakeX,
+						static_cast<int>(lz.y2) + gShakeY,
+						0xFF448888
+					);
+				}
+				else {
+					bool isTransparent = (lz.airPhaseThrough && !player.onGround);
+					unsigned int outerCol = isTransparent ? 0xFF336633 : 0xFF2255DD;
+					unsigned int innerCol = isTransparent ? 0xFFFFFF44 : 0xFFFFFFFF;
+
+					if (fabsf(lz.x1 - lz.x2) < 1.0f) {
+						// 垂直レーザーは矩形で綺麗に描画
+						float topY = (lz.y1 < lz.y2) ? lz.y1 : lz.y2;
+						float botY = (lz.y1 < lz.y2) ? lz.y2 : lz.y1;
+						Rect(lz.x1 - lz.width * 0.5f, topY, lz.width, botY - topY, outerCol);
+						Rect(lz.x1 - lz.width * 0.25f, topY, lz.width * 0.5f, botY - topY, innerCol);
+					}
+					else {
+						// 斜めレーザーは太さを複数本の線で表現
+						float dx = lz.x2 - lz.x1;
+						float dy = lz.y2 - lz.y1;
+						float len = sqrtf(dx * dx + dy * dy);
+						if (len > 0.0f) {
+							float nx = -dy / len;
+							float ny = dx / len;
+							int halfW = static_cast<int>(lz.width * 0.5f);
+							for (int w = -halfW; w <= halfW; w++) {
+								unsigned int col = (abs(w) <= halfW / 2) ? innerCol : outerCol;
+								Novice::DrawLine(
+									static_cast<int>(lz.x1 + nx * w) + gShakeX,
+									static_cast<int>(lz.y1 + ny * w) + gShakeY,
+									static_cast<int>(lz.x2 + nx * w) + gShakeX,
+									static_cast<int>(lz.y2 + ny * w) + gShakeY,
+									col
+								);
+							}
+						}
+					}
+				}
+			}
+
+			// ---- ボスの弾描画 ----
 			for (int i = 0; i < kMaxEBullets; i++) {
 				const EBullet& b = ebullets[i];
 				if (!b.active) continue;
@@ -1065,8 +1747,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Circle(b.x, b.y, b.r, 0x66FFFFFF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
-				else if (b.meteor)
-				{
+				else if (b.meteor) {
 					Novice::DrawSpriteRect(
 						static_cast<int>(b.x - kMeteorFrameWidth * 0.5f) + gShakeX,
 						static_cast<int>(b.y - kMeteorFrameHeight * 0.5f) + gShakeY,
@@ -1080,6 +1761,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						0.0f,
 						0xFFFFFFFF
 					);
+				}
+				else if (boss.type == 2) {
+					// ステージ3：弾1（パリィ可能）はシアン系、弾2（パリィ不可）は赤紫系で視覚区別
+					if (b.unparryable) {
+						Circle(b.x, b.y, b.r, 0xFF2266FF);
+						Circle(b.x, b.y, b.r * 0.5f, 0x440022FF);
+					}
+					else {
+						Circle(b.x, b.y, b.r, 0x33EEFFFF);
+						Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
+					}
 				}
 				else {
 					Circle(
