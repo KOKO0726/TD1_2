@@ -29,6 +29,8 @@ const int kPlayerMaxHp = 5;
 const int kIntroFrames = 120;
 const int kTotalStages = 3;   // ステージ数
 
+const int kBreakDuration = 360; // ブレイク時の行動停止フレーム数 (3秒)
+
 // ==================================================
 // 構造体
 // ==================================================
@@ -76,11 +78,26 @@ struct Boss {
 	float vx, vy;
 	int hp;
 	int maxHp;
+	int breakGauge;     // 現在のブレイクゲージ
+	int maxBreakGauge;  // 最大ブレイクゲージ
+	bool isBroken;      // ブレイク状態か
+	int breakTimer;     // ブレイク残り時間
 	int state;
 	int timer;
 	int dir;
 	int flash;
 	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
+};
+
+// ダメージ数字の表示(ボスにダメージを与えたとき、数字が浮かんで消える)
+const int kMaxDamagePopups = 16;    // 同時に出せる数
+const int kDamagePopupFrames = 45;  // 表示している長さ(フレーム)
+
+struct DamagePopup {
+	float x, y;     // 出した位置(ボスの頭の上)
+	int damage;     // 表示するダメージ量
+	int timer;      // 残りフレーム(0 以下 = 表示していない)
+	bool isCritical;// ブレイク中(1.5倍)の強調表示用
 };
 
 enum Scene { kTitle, kStageSelect, kPlay, kGameOver, kVictory };
@@ -129,6 +146,37 @@ static bool LandOnPlatform(const Platform* plats, float x, float w, float prevBo
 
 static float Clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+// ダメージ数字を1つ出す(空いている枠に入れる)
+static void SpawnDamagePopup(DamagePopup* popups, const Boss& boss, int damage, bool isCritical = false) {
+	for (int i = 0; i < kMaxDamagePopups; i++) {
+		if (popups[i].timer <= 0) {
+			popups[i].x = boss.x + boss.w * 0.5f + static_cast<float>(rand() % 41 - 20);
+			popups[i].y = boss.y - 20.0f;
+			popups[i].damage = damage;
+			popups[i].timer = kDamagePopupFrames;
+			popups[i].isCritical = isCritical;
+			return;
+		}
+	}
+}
+
+// ボスのブレイクゲージを削る処理
+static void DamageBossBreak(Boss& boss, int amount, int& shake) {
+	if (boss.isBroken || boss.hp <= 0) return;
+
+	boss.breakGauge -= amount;
+	if (boss.breakGauge <= 0) {
+		boss.breakGauge = 0;
+		boss.isBroken = true;
+		boss.breakTimer = kBreakDuration;
+		boss.vx = 0.0f;
+		boss.vy = 0.0f;
+		boss.state = 0; // 進行中の攻撃状態をリセット
+		boss.flash = 15;
+		shake = 20;
+	}
+}
+
 static void FireEBullet(
 	EBullet* arr,
 	float x, float y,
@@ -136,11 +184,11 @@ static void FireEBullet(
 	float r,
 	bool wave,
 	bool meteor = false
-) 
+)
 {
-	for (int i = 0; i < kMaxEBullets; i++) 
+	for (int i = 0; i < kMaxEBullets; i++)
 	{
-		if (!arr[i].active) 
+		if (!arr[i].active)
 		{
 			arr[i].active = true;
 			arr[i].x = x;
@@ -156,14 +204,15 @@ static void FireEBullet(
 	}
 }
 
-static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r) 
+static void FireAngle(EBullet* arr, float x, float y, float angle, float speed, float r)
 {
 	FireEBullet(arr, x, y, cosf(angle) * speed, sinf(angle) * speed, r, false);
 }
+
 //==================================================
-//ボスの種類ごとに初期化する関数
+// ボスの種類ごとに初期化する関数
 //==================================================
-static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, int stage) 
+static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, int stage)
 {
 	pl.x = 200.0f;
 	pl.y = groundY - 48.0f;
@@ -199,11 +248,18 @@ static void ResetGame(Player& pl, EBullet* ebullets, Boss& boss, float groundY, 
 	boss.y = groundY - boss.h;
 	boss.vx = boss.vy = 0.0f;
 	// ステージごとにボスの種類を決定 (0:スナイパー, 1:クラッシャー, 2:ウィザード)
-	boss.type = stage; 
-	//エネミーの体力をステージごとに設定
-	const int bossHpTable[kTotalStages] = { 50, 65, 80 };
+	boss.type = stage;
+	// ボスのHPを100倍に設定 (元: 50, 65, 80)
+	const int bossHpTable[kTotalStages] = { 5000, 6500, 8000 };
 	boss.maxHp = bossHpTable[stage];
 	boss.hp = boss.maxHp;
+
+	// ブレイクゲージの初期化 (パリィ数回でブレイクできる値に設定)
+	const int bossBreakTable[kTotalStages] = { 2000, 2500, 3000 };
+	boss.maxBreakGauge = bossBreakTable[stage];
+	boss.breakGauge = boss.maxBreakGauge;
+	boss.isBroken = false;
+	boss.breakTimer = 0;
 
 	boss.state = 0;
 	boss.timer = 60;
@@ -225,9 +281,9 @@ static void StartAttack(Player& pl, bool air, int step, int dir) {
 	pl.atkHit = false;
 	pl.comboWindow = 0;
 	if (!air) {
-		// 地上コンボ (1〜8段目)
+		// 地上コンボ (1〜8段目) - 攻撃力を100倍に設定
 		if (step < 8) {
-			if (step == 0 or step == 1 or step == 2) {
+			if (step == 0 || step == 1 || step == 2) {
 				pl.atkTimer = 16;
 			}
 			else {
@@ -235,11 +291,11 @@ static void StartAttack(Player& pl, bool air, int step, int dir) {
 			}
 			pl.atkHi = 11;
 			pl.atkLo = 5;
-			if (step == 0 or step == 1 or step == 2) {
-				pl.atkDmg = 2;
+			if (step == 0 || step == 1 || step == 2) {
+				pl.atkDmg = 200; // 元: 2
 			}
 			else {
-				pl.atkDmg = 1;
+				pl.atkDmg = 100; // 元: 1
 			}
 		}
 		else {
@@ -247,21 +303,21 @@ static void StartAttack(Player& pl, bool air, int step, int dir) {
 			pl.atkTimer = 26;
 			pl.atkHi = 20;
 			pl.atkLo = 6;
-			pl.atkDmg = 6;
+			pl.atkDmg = 600; // 元: 6
 		}
 	}
 	else if (step < 4) {
 		pl.atkTimer = 14;
 		pl.atkHi = 10;
 		pl.atkLo = 3;
-		pl.atkDmg = 2;
+		pl.atkDmg = 200; // 元: 2
 		pl.vy = 0.0f;
 	}
 	else {
 		pl.atkTimer = 24;
 		pl.atkHi = 18;
 		pl.atkLo = 5;
-		pl.atkDmg = 4;
+		pl.atkDmg = 400; // 元: 4
 		pl.vy = 0.0f;
 	}
 }
@@ -315,7 +371,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ==================================================
 	// 画像
 	// ==================================================
-	// 流星アニメーション
 	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
 
 	int meteorAnimationFrame = 0;
@@ -324,7 +379,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	const int kMeteorAnimationSpeed = 5;
 	const int kMeteorFrameWidth = 64;
 	const int kMeteorFrameHeight = 64;
-
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
@@ -339,6 +393,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Player player;
 	EBullet ebullets[kMaxEBullets];
 	Boss boss;
+	DamagePopup popups[kMaxDamagePopups] = {};
 	int selectedStage = 0;
 	int currentStage = 0;
 	int bestFrames[kTotalStages] = { 0, 0, 0 };
@@ -376,6 +431,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (pressStart) {
 				currentStage = selectedStage;
 				ResetGame(player, ebullets, boss, groundY, currentStage);
+				for (int i = 0; i < kMaxDamagePopups; i++) popups[i].timer = 0;
 				introTimer = kIntroFrames;
 				playFrames = 0;
 				shake = 0;
@@ -556,6 +612,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (boss.flash > 0) boss.flash--;
 			if (shake > 0) shake--;
 			playFrames++;
+			for (int i = 0; i < kMaxDamagePopups; i++) {
+				if (popups[i].timer > 0) popups[i].timer--;
+			}
 
 			// 近接攻撃のヒット判定
 			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
@@ -565,7 +624,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (introTimer == 0 && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 					bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
 					player.atkHit = true;
-					boss.hp -= player.atkDmg;
+
+					// ブレイク中はダメージ1.5倍
+					int dmg = boss.isBroken ? static_cast<int>(player.atkDmg * 1.5f) : player.atkDmg;
+					boss.hp -= dmg;
+					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
+
 					boss.flash = 6;
 					shake = finisher ? 16 : 6;
 					if (player.invincible < 15) player.invincible = 15;
@@ -592,201 +656,214 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float pcy = player.y + player.h * 0.5f;
 				float aim = atan2f(pcy - bcy, pcx - bcx);
 
-				// ボスAI処理
-				if (boss.type == 0) {
-					switch (boss.state) {
-					case 0:
-						boss.dir = (pcx > bcx) ? 1 : -1;
-						boss.x += boss.dir * 1.5f;
-						boss.timer--;
-						if (boss.timer <= 0) {
-							int pick = rand() % 3;
-
-							if (pick == 0)
-							{
-								boss.state = 1;
-								boss.timer = 50;
-							}
-							else if (pick == 1)
-							{
-								boss.state = 2;
-								boss.timer = 70;
-							}
-							else
-							{
-								// ステージ１の流星群攻撃のチャージ
-								boss.state = 3;
-								boss.timer = 100;
-							}
-						}
-				
-						break;
-					case 1:
-						boss.timer--;
-						if (boss.timer % 15 == 0) {
-							FireAngle(ebullets, bcx, bcy - 20.0f, aim, 9.0f, 8.0f);
-						}
-						if (boss.timer <= 0) {
-							boss.state = 0;
-							boss.timer = 70;
-						}
-						break;
-					case 2:
-						boss.timer--;
-						if (boss.timer == 35) {
-							for (int i = -1; i <= 1; i++) {
-								FireAngle(ebullets, bcx, bcy, aim + i * 0.2f, 7.0f, 10.0f);
-							}
-						}
-						if (boss.timer <= 0) {
-							boss.state = 0;
-							boss.timer = 90;
-						}
-						break;
-					case 3:
-						// ボスをプレイヤーの方向に向かせてゆっくり移動させる
-						boss.dir = (pcx > bcx) ? 1 : -1;
-						boss.x += boss.dir * 1.5f;
-
-						boss.timer--;
-						// 流星を発射する処理
-						if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0)
-						{
-							// プレイヤー付近を狙う位置
-							float startX = static_cast<float>(rand() % kScreenW);
-							float targetX = static_cast<float>(rand() % kScreenW);
-							// 流星の出現位置
-							float meteorVx = (targetX - startX) / 55.0f;
-							// 少し斜めに落ちるようにする
-							FireEBullet(
-								ebullets,
-								startX,
-								-40.0f,
-								meteorVx,
-								10.0f,
-								15.0f,
-								false,
-								true
-							);
-						}
-						// チャージ・発射が終わったら通常状態（case 0）に戻す
-						if (boss.timer <= 0) {
-							boss.state = 0;
-							boss.timer = 70;
-						}
-						break;
-					case 4:
-						boss.timer--;
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-						break;
-					}
-				}
-				else if (boss.type == 1) {
-					switch (boss.state) {
-					case 0:
-						boss.dir = (pcx > bcx) ? 1 : -1;
-						boss.x += boss.dir * 2.5f;
-						boss.timer--;
-						if (boss.timer <= 0) {
-							boss.state = (rand() % 2 == 0) ? 1 : 2;
-							if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
-							else { boss.timer = 25; }
-						}
-						break;
-					case 1:
-						boss.x += boss.dir * 16.0f;
-						boss.timer--;
-						if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
-							shake = 12;
-							boss.state = 0;
-							boss.timer = 80;
-						}
-						break;
-					case 2:
-						boss.timer--;
-						if (boss.timer <= 0) {
-							boss.vy = -22.0f;
-							boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
-							boss.state = 3;
-						}
-						break;
-					case 3:
+				// ブレイク中の行動停止処理
+				if (boss.isBroken) {
+					boss.breakTimer--;
+					// 空中でブレイクした場合は地面まで落下させる
+					if (boss.y + boss.h < groundY) {
 						boss.vy += kGravity;
-						boss.x += boss.vx;
 						boss.y += boss.vy;
-						boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
 						if (boss.y + boss.h >= groundY) {
 							boss.y = groundY - boss.h;
 							boss.vy = 0.0f;
-							shake = 18;
-							FireEBullet(ebullets, boss.x, groundY - 14.0f, -8.0f, 0.0f, 16.0f, true);
-							FireEBullet(ebullets, boss.x + boss.w, groundY - 14.0f, 8.0f, 0.0f, 16.0f, true);
-							boss.state = 0;
-							boss.timer = 90;
 						}
-						break;
-					case 4:
-						boss.timer--;
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-						break;
+					}
+					// ブレイク終了で復帰
+					if (boss.breakTimer <= 0) {
+						boss.isBroken = false;
+						boss.breakGauge = boss.maxBreakGauge;
+						boss.state = 0;
+						boss.timer = 60;
 					}
 				}
 				else {
-					switch (boss.state) {
-					case 0:
-						boss.dir = (pcx > bcx) ? 1 : -1;
-						boss.x += boss.dir * 2.0f;
-						boss.y = 400.0f + sinf(frame * 0.08f) * 120.0f;
-						boss.timer--;
-						if (boss.timer <= 0) {
-							int pick = rand() % 3;
-							if (pick == 0) boss.state = 1;
-							else if (pick == 1) boss.state = 2;
-							else boss.state = 3;
-							boss.timer = 60;
-						}
-						break;
-					case 1:
-						boss.timer--;
-						if (boss.timer == 30) {
-							for (int i = 0; i < 12; i++) {
-								float ang = i * (2.0f * kPi / 12.0f);
-								FireAngle(ebullets, bcx, bcy, ang, 5.5f, 10.0f);
+					// 通常時のボスAI処理
+					if (boss.type == 0) {
+						switch (boss.state) {
+						case 0:
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							boss.x += boss.dir * 1.5f;
+							boss.timer--;
+							if (boss.timer <= 0) {
+								int pick = rand() % 3;
+
+								if (pick == 0)
+								{
+									boss.state = 1;
+									boss.timer = 50;
+								}
+								else if (pick == 1)
+								{
+									boss.state = 2;
+									boss.timer = 70;
+								}
+								else
+								{
+									// ステージ１の流星群攻撃のチャージ
+									boss.state = 3;
+									boss.timer = 100;
+								}
 							}
-						}
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
-						break;
-					case 2:
-						boss.timer--;
-						if (boss.timer % 10 == 0) {
-							FireAngle(ebullets, bcx, bcy, aim, 8.0f, 12.0f);
-						}
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 80; }
-						break;
-					case 3:
-						boss.timer--;
-						if (boss.timer == 30) {
-							boss.x = kScreenW * 0.5f - boss.w * 0.5f;
-							shake = 10;
-							for (int i = 0; i < 16; i++) {
-								float ang = i * (2.0f * kPi / 16.0f);
-								FireAngle(ebullets, bcx, bcy, ang, 6.0f, 8.0f);
+							break;
+						case 1:
+							boss.timer--;
+							if (boss.timer % 15 == 0) {
+								FireAngle(ebullets, bcx, bcy - 20.0f, aim, 9.0f, 8.0f);
 							}
+							if (boss.timer <= 0) {
+								boss.state = 0;
+								boss.timer = 70;
+							}
+							break;
+						case 2:
+							boss.timer--;
+							if (boss.timer == 35) {
+								for (int i = -1; i <= 1; i++) {
+									FireAngle(ebullets, bcx, bcy, aim + i * 0.2f, 7.0f, 10.0f);
+								}
+							}
+							if (boss.timer <= 0) {
+								boss.state = 0;
+								boss.timer = 90;
+							}
+							break;
+						case 3:
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							boss.x += boss.dir * 1.5f;
+							boss.timer--;
+							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0)
+							{
+								float startX = static_cast<float>(rand() % kScreenW);
+								float targetX = static_cast<float>(rand() % kScreenW);
+								float meteorVx = (targetX - startX) / 55.0f;
+								FireEBullet(
+									ebullets,
+									startX,
+									-40.0f,
+									meteorVx,
+									10.0f,
+									15.0f,
+									false,
+									true
+								);
+							}
+							if (boss.timer <= 0) {
+								boss.state = 0;
+								boss.timer = 70;
+							}
+							break;
+						case 4:
+							boss.timer--;
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+							break;
 						}
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
-						break;
-					case 4:
-						boss.timer--;
-						if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-						break;
 					}
-					if (boss.type == 2 && boss.state != 3) {
-						boss.y = Clamp(boss.y, 200.0f, groundY - boss.h);
+					else if (boss.type == 1) {
+						switch (boss.state) {
+						case 0:
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							boss.x += boss.dir * 2.5f;
+							boss.timer--;
+							if (boss.timer <= 0) {
+								boss.state = (rand() % 2 == 0) ? 1 : 2;
+								if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
+								else { boss.timer = 25; }
+							}
+							break;
+						case 1:
+							boss.x += boss.dir * 16.0f;
+							boss.timer--;
+							if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
+								shake = 12;
+								boss.state = 0;
+								boss.timer = 80;
+							}
+							break;
+						case 2:
+							boss.timer--;
+							if (boss.timer <= 0) {
+								boss.vy = -22.0f;
+								boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
+								boss.state = 3;
+							}
+							break;
+						case 3:
+							boss.vy += kGravity;
+							boss.x += boss.vx;
+							boss.y += boss.vy;
+							boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
+							if (boss.y + boss.h >= groundY) {
+								boss.y = groundY - boss.h;
+								boss.vy = 0.0f;
+								shake = 18;
+								FireEBullet(ebullets, boss.x, groundY - 14.0f, -8.0f, 0.0f, 16.0f, true);
+								FireEBullet(ebullets, boss.x + boss.w, groundY - 14.0f, 8.0f, 0.0f, 16.0f, true);
+								boss.state = 0;
+								boss.timer = 90;
+							}
+							break;
+						case 4:
+							boss.timer--;
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+							break;
+						}
+					}
+					else {
+						switch (boss.state) {
+						case 0:
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							boss.x += boss.dir * 2.0f;
+							boss.y = 400.0f + sinf(frame * 0.08f) * 120.0f;
+							boss.timer--;
+							if (boss.timer <= 0) {
+								int pick = rand() % 3;
+								if (pick == 0) boss.state = 1;
+								else if (pick == 1) boss.state = 2;
+								else boss.state = 3;
+								boss.timer = 60;
+							}
+							break;
+						case 1:
+							boss.timer--;
+							if (boss.timer == 30) {
+								for (int i = 0; i < 12; i++) {
+									float ang = i * (2.0f * kPi / 12.0f);
+									FireAngle(ebullets, bcx, bcy, ang, 5.5f, 10.0f);
+								}
+							}
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
+							break;
+						case 2:
+							boss.timer--;
+							if (boss.timer % 10 == 0) {
+								FireAngle(ebullets, bcx, bcy, aim, 8.0f, 12.0f);
+							}
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 80; }
+							break;
+						case 3:
+							boss.timer--;
+							if (boss.timer == 30) {
+								boss.x = kScreenW * 0.5f - boss.w * 0.5f;
+								shake = 10;
+								for (int i = 0; i < 16; i++) {
+									float ang = i * (2.0f * kPi / 16.0f);
+									FireAngle(ebullets, bcx, bcy, ang, 6.0f, 8.0f);
+								}
+							}
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
+							break;
+						case 4:
+							boss.timer--;
+							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+							break;
+						}
+						if (boss.type == 2 && boss.state != 3) {
+							boss.y = Clamp(boss.y, 200.0f, groundY - boss.h);
+						}
 					}
 				}
 
 				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
-
 				// ボスの弾の更新とパリィ・被弾判定
 				for (int i = 0; i < kMaxEBullets; i++) {
 					EBullet& b = ebullets[i];
@@ -800,7 +877,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					if (b.reflected) {
 						if (HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
 							b.active = false;
-							boss.hp -= 4;
+							// パリィ威力は25倍 (4 * 25 = 100)、ブレイク中はさらに1.5倍
+							int baseParryDmg = 100;
+							int dmg = boss.isBroken ? static_cast<int>(baseParryDmg * 1.5f) : baseParryDmg;
+							boss.hp -= dmg;
+							SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
+
+							// パリィした弾がボスに当たった時のみブレイクゲージを削る
+							DamageBossBreak(boss, 150, shake);
+
 							boss.flash = 10;
 							shake = 8;
 						}
@@ -817,6 +902,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							b.vy = sinf(ang) * 14.0f;
 							b.r = 14.0f;
 						}
+						// ※ここでのブレイクゲージ削り処理を削除
+
 						player.parryCooldown = 0;
 						player.invincible = 20;
 						player.parryFlash = 10;
@@ -829,8 +916,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 
-				// ボス本体との当たり判定（踏みつけ処理は除外）
-				if (HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
+				// ボス本体との当たり判定（ブレイク中は接触ダメージなし）
+				if (!boss.isBroken && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
 					if (player.parryTimer > 0) {
 						boss.state = 4;
 						boss.timer = 70;
@@ -867,17 +954,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kGameOver;
 			}
 		}
+
 		//==========================================
-		//アニメーション更新処理
+		// アニメーション更新処理
 		//==========================================
 		meteorAnimationTimer++;
-
 		if (meteorAnimationTimer >= kMeteorAnimationSpeed)
 		{
 			meteorAnimationTimer = 0;
-
 			meteorAnimationFrame++;
-
 			if (meteorAnimationFrame >= 4)
 			{
 				meteorAnimationFrame = 0;
@@ -908,22 +993,26 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			else if (boss.type == 1) bodyColor = 0xCC4433FF;
 			else bodyColor = 0x9933CCFF;
 
+			// ブレイク中は色を変えて行動停止を視覚化
+			if (boss.isBroken) {
+				bodyColor = ((boss.breakTimer / 5) % 2 == 0) ? 0xFFCC00FF : 0x888899FF;
+			}
 			if (boss.flash > 0) bodyColor = 0xFFFFFFFF;
-			if (boss.state == 4 && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
+			if (!boss.isBroken && boss.state == 4 && boss.flash == 0 && (boss.timer / 6) % 2 == 0) bodyColor = 0x66CCFFFF;
 
 			float drawH = boss.h;
 			float drawY = boss.y;
-			// ステージ1の流星群チャージ演出
-			if (boss.type == 0 && boss.state == 3) {
-
-				// ボス縮む
+			// ブレイク中は少し姿勢を低くする
+			if (boss.isBroken) {
+				drawH = boss.h - 20.0f;
+				drawY = boss.y + 20.0f;
+			}
+			else if (boss.type == 0 && boss.state == 3) {
 				drawH = boss.h - 15.0f;
 				drawY = boss.y + 15.0f;
-
-				// チャージ中紫色に光る
 				bodyColor = 0xBB66FFFF;
 			}
-			if (boss.type == 1 && boss.state == 2) {
+			else if (boss.type == 1 && boss.state == 2) {
 				drawH = boss.h - 30.0f;
 				drawY = boss.y + 30.0f;
 			}
@@ -948,28 +1037,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Rect(boss.x + boss.w * 0.5f - 15.0f, drawY - 35.0f, 30.0f, 35.0f, 0xDD99FFFF);
 			}
 
-			// ステージ１の流星群チャージ中のエフェクト
-			if (boss.type == 0 && boss.state == 3) {
-
+			// ブレイク中の頭上テキスト
+			if (boss.isBroken) {
+				PrintfCenter(
+					static_cast<int>(boss.x + boss.w * 0.5f),
+					static_cast<int>(drawY - 55.0f),
+					"BREAK!! (1.5x DMG)"
+				);
+			}
+			else if (boss.type == 0 && boss.state == 3) {
 				float centerX = boss.x + boss.w * 0.5f;
 				float centerY = boss.y + boss.h * 0.5f;
-
-				// 周囲にチャージの輪を表示
 				float effectSize = 60.0f + (frame % 20) * 2.0f;
-
-				Circle(
-					centerX,
-					centerY,
-					effectSize,
-					0xAA66FF55
-				);
-
-				// チャージ中の文字
-				PrintfCenter(
-					static_cast<int>(centerX),
-					static_cast<int>(boss.y - 45.0f),
-					"CHARGING..."
-				);
+				Circle(centerX, centerY, effectSize, 0xAA66FF55);
+				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "CHARGING...");
 			}
 
 			for (int i = 0; i < kMaxEBullets; i++) {
@@ -979,7 +1060,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Circle(b.x, b.y, b.r, 0x66FFFFFF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
-				// 流星の描画
 				else if (b.meteor)
 				{
 					Novice::DrawSpriteRect(
@@ -990,8 +1070,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						kMeteorFrameWidth,
 						kMeteorFrameHeight,
 						meteorTexture,
-						1.0f / 4.0f, 
-						1.0f,        
+						1.0f / 4.0f,
+						1.0f,
 						0.0f,
 						0xFFFFFFFF
 					);
@@ -1004,7 +1084,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						boss.type == 0 ? 0x00FF88FF :
 						(boss.type == 1 ? 0xFF8800FF : 0xFF44FFFF)
 					);
-
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 			}
@@ -1045,6 +1124,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
 			}
 
+			// ---- ダメージ表示(通常は赤、ブレイク中の1.5倍ダメージは黄色で表示) ----
+			for (int i = 0; i < kMaxDamagePopups; i++) {
+				const DamagePopup& d = popups[i];
+				if (d.timer <= 0) continue;
+				int rise = kDamagePopupFrames - d.timer;
+				unsigned int alpha = (d.timer > 15) ? 255u : static_cast<unsigned int>(d.timer * 255 / 15);
+				char buf[16];
+				snprintf(buf, sizeof(buf), "%d", d.damage);
+				int tx = static_cast<int>(d.x) - GetFont().Width(buf) / 2;
+				int ty = static_cast<int>(d.y) - rise;
+				unsigned int baseColor = d.isCritical ? 0xFFEE33u : 0xFF3030u;
+				GetFont().Draw(tx + 2, ty + 2, buf, alpha);
+				GetFont().Draw(tx, ty, buf, (baseColor << 8) | alpha);
+			}
+
 			// ---- HUD ----
 			GetFont().Printf(20, 10, "PLAYER");
 			for (int i = 0; i < kPlayerMaxHp; i++) {
@@ -1061,9 +1155,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			const char* bossNames[3] = { "SNIPER BOSS", "CRUSHER BOSS", "WIZARD BOSS" };
 			PrintfCenter(640, 6, "STAGE %d : %s", currentStage + 1, bossNames[currentStage]);
+			// ボスHPバー
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400 * boss.hp / boss.maxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0xFFFFFFFF, kFillModeWireFrame);
+
+			// ボスブレイクゲージバー (HPバーの直下)
+			int breakW = boss.isBroken
+				? (400 * boss.breakTimer / kBreakDuration)
+				: (400 * boss.breakGauge / boss.maxBreakGauge);
+			unsigned int breakColor = boss.isBroken ? 0x44EEFFFF : 0xFFCC22FF;
+			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0x333333FF, kFillModeSolid);
+			Novice::DrawBox(440, 58, breakW, 10, 0.0f, breakColor, kFillModeSolid);
+			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0xCCCCCCFF, kFillModeWireFrame);
 
 			if (introTimer > 0) {
 				if ((introTimer / 10) % 2 == 0) {
