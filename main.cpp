@@ -906,7 +906,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					else if (boss.type == 1) {
 						switch (boss.state) {
 						case 0:
-							if (!isReverseAttackUsed) { isScreenReverse = true; isReverseAttackUsed = true; }
+							/*if (!isReverseAttackUsed) { isScreenReverse = true; isReverseAttackUsed = true; }
+							int drawX = (int)player.x;
+							int drawY = (int)player.y;
+
+							float rotate = 0.0f;*/
+
+						/*	if (isScreenReverse) {
+								drawX = kScreenW - player.x - player.w;
+								drawY = kScreenH - player.y - player.h;
+							}
+
+							Rect(drawX, drawY, player.w, player.h, 0x4AA8FFFF);
+*/
+
+
+
 						case 1:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 2.5f;
