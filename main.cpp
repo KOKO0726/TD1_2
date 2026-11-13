@@ -581,8 +581,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	const int kJesseFrameWidth = 64;
 	const int kJesseFrameHeight = 96;
-	const int kJesseFrameCount = 4;   
-	const int kJesseAnimSpeed = 8;    
+	const int kJesseFrameCount = 4;
+	const int kJesseAnimSpeed = 8;
 	int jesseAnimFrame = 0;
 	int jesseAnimTimer = 0;
 
@@ -943,13 +943,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 							float rotate = 0.0f;*/
 
-						/*	if (isScreenReverse) {
-								drawX = kScreenW - player.x - player.w;
-								drawY = kScreenH - player.y - player.h;
-							}
+							/*	if (isScreenReverse) {
+									drawX = kScreenW - player.x - player.w;
+									drawY = kScreenH - player.y - player.h;
+								}
 
-							Rect(drawX, drawY, player.w, player.h, 0x4AA8FFFF);
-*/
+								Rect(drawX, drawY, player.w, player.h, 0x4AA8FFFF);
+	*/
 
 
 
@@ -1847,10 +1847,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					// 縮む演出（ブレイクやチャージ）に合わせて縦の倍率を調整
 					float scaleY = drawH / boss.h;
 
+					// 描画するアニメーションコマ番号の決定
+					int drawFrame = jesseAnimFrame;
+					if (!boss.isBroken && boss.state == 3) {
+						if (boss.timer > 40) {
+							// メテオが降るまでは1枚目（0番目）をキープ
+							drawFrame = 0;
+						}
+						else {
+							// メテオが降り始めたら2〜4枚目（1〜3番目）をアニメーション
+							drawFrame = 1 + (jesseAnimFrame % 3);
+						}
+					}
+
 					Novice::DrawSpriteRect(
 						static_cast<int>(boss.x + (boss.w - kJesseFrameWidth) * 0.5f) + gShakeX,
 						static_cast<int>(drawY) + gShakeY,
-						jesseAnimFrame * kJesseFrameWidth,
+						drawFrame * kJesseFrameWidth,
 						0,
 						kJesseFrameWidth,
 						kJesseFrameHeight,
