@@ -410,6 +410,10 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 		boss.w = 48.0f;
 		boss.h = 76.0f;
 	}
+	else if (stage == 0) { //ステージ1用
+		boss.w = 64.0f;
+		boss.h = 96.0f;
+	}
 	else {
 		boss.w = 140.0f;
 		boss.h = 140.0f;
@@ -550,13 +554,29 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
+	//==================================================
+	// 画像読み込み
+	//==================================================
 	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
 	int meteorAnimationFrame = 0;
 	int meteorAnimationTimer = 0;
-
 	const int kMeteorAnimationSpeed = 5;
 	const int kMeteorFrameWidth = 64;
 	const int kMeteorFrameHeight = 64;
+	//==================================================
+	//ステージ１のエネミー
+	//==================================================
+	int jessestandbyLeftTexture = Novice::LoadTexture("./Resources/images/jessestand-byLeft.png");
+	int jessestandbyRightTexture = Novice::LoadTexture("./Resources/images/jessestand-byRight.png");
+	int jesseWalkLeftTexture = Novice::LoadTexture("./Resources/images/jesseWalkLeft.png");
+	int jesseWalkRightTexture = Novice::LoadTexture("./Resources/images/jesseWalkRight.png");
+
+	const int kJesseFrameWidth = 64;
+	const int kJesseFrameHeight = 96;
+	const int kJesseFrameCount = 4;   
+	const int kJesseAnimSpeed = 8;    
+	int jesseAnimFrame = 0;
+	int jesseAnimTimer = 0;
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
@@ -1715,14 +1735,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kGameOver;
 			}
 		}
-
+		//==================================================
+		//アニメーション更新
+		//==================================================
 		meteorAnimationTimer++;
 		if (meteorAnimationTimer >= kMeteorAnimationSpeed) {
 			meteorAnimationTimer = 0;
 			meteorAnimationFrame++;
 			if (meteorAnimationFrame >= 4) meteorAnimationFrame = 0;
 		}
+		//ステージ1ボスのアニメーション更新
+		jesseAnimTimer++;
+		if (jesseAnimTimer >= kJesseAnimSpeed) {
+			jesseAnimTimer = 0;
+			jesseAnimFrame = (jesseAnimFrame + 1) % kJesseFrameCount;
+		}
 
+		//==================================================
+		//==================================================
+		//描画処理
+		//==================================================
+		//==================================================
 		if (shake > 0) {
 			gShakeX = (rand() % 11) - 5;
 			gShakeY = (rand() % 11) - 5;
@@ -1756,41 +1789,84 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			float drawH = boss.h;
 			float drawY = boss.y;
-			if (boss.isBroken) {
-				float crouch = (boss.type == 2) ? 10.0f : 20.0f;
-				drawH = boss.h - crouch;
-				drawY = boss.y + crouch;
-			}
-			// ステージ1のチャージ中の姿勢制御
-			else if (boss.type == 0 && boss.state == 3) {
-				drawH = boss.h - 15.0f;
-				drawY = boss.y + 15.0f;
-				bodyColor = 0xBB66FFFF;
-			}
-
-			if (!boss.hidden) {
-				Rect(boss.x, drawY, boss.w, drawH, bodyColor);
-
-				if (boss.type == 2) {
-					float eyeY = drawY + 20.0f;
-					float eyeX = (boss.dir == 1) ? boss.x + boss.w - 26.0f : boss.x + 6.0f;
-					Rect(eyeX, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
-					Rect(eyeX + 12.0f, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
-					Rect(eyeX + 2.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
-					Rect(eyeX + 14.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
-
-					Rect(boss.x + boss.w * 0.5f - 8.0f, drawY - 18.0f, 16.0f, 18.0f, 0xDD99FFFF);
+			// ステージ1は縮小演出を行わない
+			if (boss.type != 0) {
+				if (boss.isBroken) {
+					float crouch = (boss.type == 2) ? 10.0f : 20.0f;
+					drawH = boss.h - crouch;
+					drawY = boss.y + crouch;
 				}
-				else {
-					float eyeY = drawY + 40.0f;
-					float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
-					Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-					Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
-					Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
-					Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+			}
+			//=================================================
+			//ステージ１のボスの描画
+			//=================================================
+			if (!boss.hidden) {
+				if (boss.type == 0) {
+					// 歩いているか判定（state 0:通常移動 または state 3:流星群移動中）
+					bool isWalking = (!boss.isBroken && (boss.state == 0 || boss.state == 3));
 
-					if (boss.type == 0) {
-						Rect(boss.x + boss.w * 0.5f - 5.0f, drawY - 30.0f, 10.0f, 30.0f, 0xCCCCCCFF);
+					// 状態と向き（boss.dir: 1が右、-1が左）に応じてテクスチャを選択
+					int currentTex = 0;
+					if (isWalking) {
+						currentTex = (boss.dir == 1) ? jesseWalkRightTexture : jesseWalkLeftTexture;
+					}
+					else {
+						currentTex = (boss.dir == 1) ? jessestandbyRightTexture : jessestandbyLeftTexture;
+					}
+
+					// ダメージ時の白点滅やブレイク時の色変化を反映
+					unsigned int spriteColor = 0xFFFFFFFF;
+					if (boss.flash > 0) {
+						spriteColor = 0xFF8888FF; // 被弾時に赤く光る（真っ白にしたい場合は 0xFFFFFFFF）
+					}
+					else if (boss.isBroken) {
+						spriteColor = ((boss.breakTimer / 5) % 2 == 0) ? 0xFFCC00FF : 0x888899FF;
+					}
+					else if (boss.state == 3) {
+						spriteColor = 0xDD99FFFF; // チャージ中は少し紫がかる
+					}
+
+					// 縮む演出（ブレイクやチャージ）に合わせて縦の倍率を調整
+					float scaleY = drawH / boss.h;
+
+					Novice::DrawSpriteRect(
+						static_cast<int>(boss.x + (boss.w - kJesseFrameWidth) * 0.5f) + gShakeX,
+						static_cast<int>(drawY) + gShakeY,
+						jesseAnimFrame * kJesseFrameWidth,
+						0,
+						kJesseFrameWidth,
+						kJesseFrameHeight,
+						currentTex,
+						1.0f / static_cast<float>(kJesseFrameCount),
+						scaleY,
+						0.0f,
+						spriteColor
+					);
+				}
+				//=================================================
+				//ステージ２・３のボスの描画（四角形描画）
+				//=================================================
+				else {
+					// ステージ2・3は従来の四角形描画
+					Rect(boss.x, drawY, boss.w, drawH, bodyColor);
+
+					if (boss.type == 2) {
+						float eyeY = drawY + 20.0f;
+						float eyeX = (boss.dir == 1) ? boss.x + boss.w - 26.0f : boss.x + 6.0f;
+						Rect(eyeX, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
+						Rect(eyeX + 12.0f, eyeY, 8.0f, 10.0f, 0xFFFFFFFF);
+						Rect(eyeX + 2.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
+						Rect(eyeX + 14.0f, eyeY + 3.0f, 4.0f, 4.0f, 0x000000FF);
+
+						Rect(boss.x + boss.w * 0.5f - 8.0f, drawY - 18.0f, 16.0f, 18.0f, 0xDD99FFFF);
+					}
+					else {
+						float eyeY = drawY + 40.0f;
+						float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
+						Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+						Rect(eyeX + 30.0f, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
+						Rect(eyeX + 6.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
+						Rect(eyeX + 36.0f, eyeY + 6.0f, 8.0f, 8.0f, 0x000000FF);
 					}
 				}
 			}
