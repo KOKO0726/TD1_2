@@ -566,10 +566,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//==================================================
 	//ステージ１のエネミー
 	//==================================================
-	int jessestandbyLeftTexture = Novice::LoadTexture("./Resources/images/jessestand-byLeft.png");
-	int jessestandbyRightTexture = Novice::LoadTexture("./Resources/images/jessestand-byRight.png");
+	//攻撃のテクスチャ
+	int jesseConsecutiveAttacksLeftTexture = Novice::LoadTexture("./Resources/images/jesseConsecutive attacksLeft.png");
+	int jesseConsecutiveattacksRightTexture = Novice::LoadTexture("./Resources/images/jesseConsecutive attacksRight.png");
+	//歩くテクスチャ
 	int jesseWalkLeftTexture = Novice::LoadTexture("./Resources/images/jesseWalkLeft.png");
 	int jesseWalkRightTexture = Novice::LoadTexture("./Resources/images/jesseWalkRight.png");
+	//チャージ攻撃のテクスチャ
+	int jesseChargeAttackLeftTexture = Novice::LoadTexture("./Resources/images/jesseChargeAttackLeft.png");
+	int jesseChargeAttackRightTexture = Novice::LoadTexture("./Resources/images/jesseChargeAttackRight.png");
+	//ブレイクのテクスチャ
+	int jesseBreakLeftTexture = Novice::LoadTexture("./Resources/images/jesseBreakLeft.png");
+	int jesseBreakRightTexture = Novice::LoadTexture("./Resources/images/jesseBreakRight.png");
 
 	const int kJesseFrameWidth = 64;
 	const int kJesseFrameHeight = 96;
@@ -907,7 +915,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							break;
 						case 3:
 							boss.dir = (pcx > bcx) ? 1 : -1;
-							boss.x += boss.dir * 1.5f;
+							// チャージ中
+							if (boss.timer <= 40) {
+								boss.x += boss.dir * 1.5f;
+							}
 							boss.timer--;
 							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0) {
 								float startX = static_cast<float>(rand() % kScreenW);
@@ -1802,16 +1813,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//=================================================
 			if (!boss.hidden) {
 				if (boss.type == 0) {
-					// 歩いているか判定（state 0:通常移動 または state 3:流星群移動中）
-					bool isWalking = (!boss.isBroken && (boss.state == 0 || boss.state == 3));
-
-					// 状態と向き（boss.dir: 1が右、-1が左）に応じてテクスチャを選択
+					// 状態（ブレイク中、チャージ中、歩行中、それ以外）と向きに応じて描画するテクスチャを切り替え
 					int currentTex = 0;
-					if (isWalking) {
+					if (boss.isBroken) {
+						// ブレイク中
+						currentTex = (boss.dir == 1) ? jesseBreakRightTexture : jesseBreakLeftTexture;
+					}
+					else if (boss.state == 3) {
+						// チャージ・流星群攻撃中
+						currentTex = (boss.dir == 1) ? jesseChargeAttackRightTexture : jesseChargeAttackLeftTexture;
+					}
+					else if (boss.state == 0) {
+						// 通常移動
 						currentTex = (boss.dir == 1) ? jesseWalkRightTexture : jesseWalkLeftTexture;
 					}
 					else {
-						currentTex = (boss.dir == 1) ? jessestandbyRightTexture : jessestandbyLeftTexture;
+						// 射撃攻撃中など
+						currentTex = (boss.dir == 1) ? jesseConsecutiveattacksRightTexture : jesseConsecutiveAttacksLeftTexture;
 					}
 
 					// ダメージ時の白点滅やブレイク時の色変化を反映
