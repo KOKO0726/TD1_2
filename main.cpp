@@ -68,6 +68,7 @@ struct EBullet {
 	bool wave;
 	bool reflected; // パリィで跳ね返された弾
 	bool meteor;    // 流星群
+	bool rareMeteor; //レア流星フラグ
 	// ---- ステージ3用拡張 ----
 	bool unparryable;       // true: 弾2（パリィ不可）, false: 弾1（パリィ可能）
 	bool useGravity;        // 重力落下するか
@@ -75,6 +76,14 @@ struct EBullet {
 	bool waitTimeStop;      // 時間停止解除待ちか
 	float aimX, aimY;       // 時間停止解除後に向かうターゲット座標
 	float launchSpeed;      // 時間停止解除後の弾速
+};
+
+// 登場演出用コウモリ
+const int kMaxIntroBats = 120;
+struct IntroBat {
+	float x, y;
+	float vx, vy;
+	bool active;
 };
 
 struct Laser {
@@ -108,6 +117,7 @@ struct Boss {
 	int dir;
 	int flash;
 	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
+	bool isRareMeteor; //←今回のメテオ攻撃がレアか
 
 	// ---- ステージ3専用AI変数 ----
 	bool hidden;            // 画面から消えているか
@@ -258,7 +268,8 @@ static void FireEBullet(
 	bool meteor = false,
 	bool unparryable = false,
 	bool useGravity = false,
-	bool spawnLaserOnLand = false
+	bool spawnLaserOnLand = false,
+	bool rareMeteor = false
 ) {
 	for (int i = 0; i < kMaxEBullets; i++) {
 		if (!arr[i].active) {
@@ -271,6 +282,7 @@ static void FireEBullet(
 			arr[i].wave = wave;
 			arr[i].reflected = false;
 			arr[i].meteor = meteor;
+			arr[i].rareMeteor = rareMeteor;
 			arr[i].unparryable = unparryable;
 			arr[i].useGravity = useGravity;
 			arr[i].spawnLaserOnLand = spawnLaserOnLand;
@@ -363,6 +375,23 @@ static void RefillStage3Patterns(Boss& boss) {
 		boss.patternPool[idx++] = 10;
 	}
 	boss.patternCount = idx;
+}
+// ステージ１のエネミーの登場用コウモリの関数
+static void SpawnIntroBats(IntroBat* bats, const Boss& boss)
+{
+	float bcx = boss.x + boss.w * 0.5f;
+	float bcy = boss.y + boss.h * 0.5f;
+	for (int i = 0; i < kMaxIntroBats; i++) {
+		bats[i].active = true;
+		// ボス（64x96）の全身を隙間なく覆う範囲に密集配置
+		bats[i].x = bcx + static_cast<float>((rand() % 71) - 35);
+		bats[i].y = bcy + static_cast<float>((rand() % 101) - 50);
+		// 上方向〜左右に散らばるように飛ぶ速度を設定
+		float ang = -kPi * 0.5f + static_cast<float>((rand() % 160) - 80) * (kPi / 180.0f);
+		float spd = 5.0f + static_cast<float>(rand() % 7);
+		bats[i].vx = cosf(ang) * spd;
+		bats[i].vy = sinf(ang) * spd - 2.0f;
+	}
 }
 
 static int PopStage3Pattern(Boss& boss) {
@@ -557,7 +586,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//==================================================
 	// 画像読み込み
 	//==================================================
+	//メテオ用変数と画像
 	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
+	int rareMeteorTexture = Novice::LoadTexture("./Resources/images/rareMeteor.png");
+	int caveatTexture = Novice::LoadTexture("./Resources/images/caveat.png");
 	int meteorAnimationFrame = 0;
 	int meteorAnimationTimer = 0;
 	const int kMeteorAnimationSpeed = 5;
@@ -578,14 +610,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//ブレイクのテクスチャ
 	int jesseBreakLeftTexture = Novice::LoadTexture("./Resources/images/jesseBreakLeft.png");
 	int jesseBreakRightTexture = Novice::LoadTexture("./Resources/images/jesseBreakRight.png");
-
+	//コウモリのテクスチャ
+	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
+	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
 	const int kJesseFrameHeight = 96;
 	const int kJesseFrameCount = 4;
 	const int kJesseAnimSpeed = 8;
 	int jesseAnimFrame = 0;
 	int jesseAnimTimer = 0;
+	//コウモリのアニメーション用変数
+	const int kBatFrameWidth = 32;
+	const int kBatFrameHeight = 32;
+	const int kBatFrameCount = 4;
+	const int kBatAnimSpeed = 4;
+	int batAnimFrame = 0;
+	int batAnimTimer = 0;
 
+	IntroBat introBats[kMaxIntroBats] = {};
 	srand(static_cast<unsigned int>(time(nullptr)));
 
 	Platform platforms[kPlatformNum] = {
@@ -624,12 +666,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		int activePlatformNum = (currentStage == 2) ? 1 : kPlatformNum;
 
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
-
+		// タイトル画面の処理
 		if (scene == kTitle) {
 			if (pressStart) {
 				scene = kStageSelect;
 			}
 		}
+		// ステージ選択画面の処理
 		else if (scene == kStageSelect) {
 			if ((preKeys[DIK_A] == 0 && keys[DIK_A] != 0) || (preKeys[DIK_LEFT] == 0 && keys[DIK_LEFT] != 0)) {
 				selectedStage = (selectedStage - 1 + kTotalStages) % kTotalStages;
@@ -642,6 +685,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ResetGame(player, ebullets, lasers, boss, groundY, currentStage);
 				for (int i = 0; i < kMaxDamagePopups; i++) popups[i].timer = 0;
 				introTimer = kIntroFrames;
+				// ステージ1のエネミーの登場演出用コウモリを生成
+				if (currentStage == 0)
+				{
+					SpawnIntroBats(introBats, boss);
+				}
+				else
+				{
+					for (int i = 0; i < kMaxIntroBats; i++) introBats[i].active = false;
+				}
 				playFrames = 0;
 				shake = 0;
 				gShakeX = 0;
@@ -652,6 +704,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kTitle;
 			}
 		}
+		// ゲームオーバー・クリア画面の処理
 		else if (scene == kGameOver || scene == kVictory) {
 			shake = 0;
 			gShakeX = 0;
@@ -854,10 +907,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			if (introTimer > 0) {
+			if (introTimer > 0)
+			{
 				introTimer--;
 			}
-			else {
+			else 
+			{
 				float bcx = boss.x + boss.w * 0.5f;
 				float bcy = boss.y + boss.h * 0.5f;
 				float pcx = player.x + player.w * 0.5f;
@@ -898,7 +953,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								int pick = rand() % 3;
 								if (pick == 0) { boss.state = 1; boss.timer = 50; }
 								else if (pick == 1) { boss.state = 2; boss.timer = 70; }
-								else { boss.state = 3; boss.timer = 100; }
+								else {
+									boss.state = 3;
+									boss.timer = 100;
+									boss.isRareMeteor = (rand() % 7 == 0); // ← 攻撃開始時に1回だけ7分の1で抽選
+								}
 							}
 							break;
 						case 1:
@@ -924,7 +983,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								float startX = static_cast<float>(rand() % kScreenW);
 								float targetX = static_cast<float>(rand() % kScreenW);
 								float meteorVx = (targetX - startX) / 55.0f;
-								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true);
+								// 今回のメテオ攻撃がレアなら全部レアメテオになる
+								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
 							}
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
 							break;
@@ -1581,7 +1641,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						}
 					}
 				}
-
+				// 登場演出用コウモリの移動更新（introTimerが0になった後も画面外へ出るまで飛び続ける）
+				if (currentStage == 0 && introTimer < 80)
+				{
+					for (int i = 0; i < kMaxIntroBats; i++)
+					{
+						if (!introBats[i].active) continue;
+						introBats[i].x += introBats[i].vx;
+						introBats[i].y += introBats[i].vy;
+						// 画面外に出たら消す（下方向も念のため追加）
+						if (introBats[i].x < -64.0f || introBats[i].x > kScreenW + 64.0f ||
+							introBats[i].y < -64.0f || introBats[i].y > kScreenH + 64.0f)
+						{
+							introBats[i].active = false;
+						}
+					}
+				}
 				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
 
 				// ==================================================
@@ -1761,7 +1836,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			jesseAnimTimer = 0;
 			jesseAnimFrame = (jesseAnimFrame + 1) % kJesseFrameCount;
 		}
-
+		// コウモリのアニメーション更新
+		batAnimTimer++;
+		if (batAnimTimer >= kBatAnimSpeed) {
+			batAnimTimer = 0;
+			batAnimFrame = (batAnimFrame + 1) % kBatFrameCount;
+		}
 		//==================================================
 		//==================================================
 		//描画処理
@@ -1801,7 +1881,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			float drawH = boss.h;
 			float drawY = boss.y;
 			// ステージ1は縮小演出を行わない
-			if (boss.type != 0) {
+			if (boss.type != 0)
+			{
 				if (boss.isBroken) {
 					float crouch = (boss.type == 2) ? 10.0f : 20.0f;
 					drawH = boss.h - crouch;
@@ -1811,11 +1892,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//=================================================
 			//ステージ１のボスの描画
 			//=================================================
-			if (!boss.hidden) {
-				if (boss.type == 0) {
+			if (!boss.hidden)
+			{
+				if (boss.type == 0)
+				{
 					// 状態（ブレイク中、チャージ中、歩行中、それ以外）と向きに応じて描画するテクスチャを切り替え
 					int currentTex = 0;
-					if (boss.isBroken) {
+					if (boss.isBroken)
+					{
 						// ブレイク中
 						currentTex = (boss.dir == 1) ? jesseBreakRightTexture : jesseBreakLeftTexture;
 					}
@@ -1901,17 +1985,55 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 			}
-
+			//ステージ１のエネミーのコウモリの描画
+			for (int i = 0; i < kMaxIntroBats; i++)
+			{
+				if (!introBats[i].active) continue;
+				// 密集している間は少しワサワサと小刻みに揺らす
+				int jitterX = (introTimer >= 80) ? ((rand() % 7) - 3) : 0;
+				int jitterY = (introTimer >= 80) ? ((rand() % 7) - 3) : 0;
+				Novice::DrawSpriteRect(
+					static_cast<int>(introBats[i].x - kBatFrameWidth * 0.5f) + gShakeX + jitterX,
+					static_cast<int>(introBats[i].y - kBatFrameHeight * 0.5f) + gShakeY + jitterY,
+					batAnimFrame * kBatFrameWidth,
+					0,
+					kBatFrameWidth,
+					kBatFrameHeight,
+					batTexture,
+					1.0f / static_cast<float>(kBatFrameCount),
+					1.0f,
+					0.0f,
+					0xFFFFFFFF
+				);
+			}
 			if (boss.isBroken) {
 				PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
 			}
-			// ステージ1のチャージ中演出（エフェクト円 ＆ "CHARGING..." テキスト）の復元
+			// ステージ1のチャージ中演出
 			else if (boss.type == 0 && boss.state == 3) {
 				float centerX = boss.x + boss.w * 0.5f;
 				float centerY = boss.y + boss.h * 0.5f;
 				float effectSize = 60.0f + (frame % 20) * 2.0f;
 				Circle(centerX, centerY, effectSize, 0xAA66FF55);
-				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "CHARGING...");
+				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "メテオコウゲキ");
+				//画面上部に警告画像を3つ表示 
+				const int kCaveatW = 256;
+				const int kCaveatY = 90;
+				if (boss.timer > 40 && (frame / 6) % 2 == 0)
+				{
+					for (int i = 0; i < 3; i++) {
+						int cx = (kScreenW / 4) * (i + 1) - (kCaveatW / 2);
+						Novice::DrawSprite(
+							cx + gShakeX,
+							kCaveatY + gShakeY,
+							caveatTexture,
+							1.0f,
+							1.0f,
+							0.0f,
+							0xFFFFFFFF
+						);
+					}
+				}
 			}
 			else if (boss.type == 2 && boss.timeStopPrepTimer > 0 && boss.timeStopPrepTimer < 60) {
 				PrintfCenter(640, 180, "PREPARING TIME STOP...");
@@ -1971,7 +2093,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 				// ステージ1の流星群攻撃（スプライト描画の復元）
-				else if (b.meteor) {
+				else if (b.meteor)
+				{
+					int tex = b.rareMeteor ? rareMeteorTexture : meteorTexture; // ← テクスチャ切り替え
 					Novice::DrawSpriteRect(
 						static_cast<int>(b.x - kMeteorFrameWidth * 0.5f) + gShakeX,
 						static_cast<int>(b.y - kMeteorFrameHeight * 0.5f) + gShakeY,
@@ -1979,7 +2103,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						0,
 						kMeteorFrameWidth,
 						kMeteorFrameHeight,
-						meteorTexture,
+						tex, // ← ここを tex に変更
 						1.0f / 4.0f,
 						1.0f,
 						0.0f,
