@@ -60,6 +60,10 @@ struct Player {
 	int atkDmg;
 	int comboWindow;  // 次の段を入力できる猶予(この間は空中に留まる)
 	int airComboLeft; // 空中コンボ開始権(着地で回復)
+
+	//ステージ１のエネミーの吹き飛ばし用の変数
+	int knockbackTimer; // 吹き飛ばされ中のフレーム数
+	float knockbackVx;  // 吹き飛ばし時の横速度
 };
 
 struct EBullet {
@@ -117,7 +121,11 @@ struct Boss {
 	int dir;
 	int flash;
 	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
-	bool isRareMeteor; //←今回のメテオ攻撃がレアか
+	//ステージ１のボス用変数
+	bool isRareMeteor; //今回のメテオ攻撃がレアか
+	int hitCount;      //ステージ1の吹き飛ばしカウンター用
+	int repelEffectTimer; //吹き飛ばしエフェクトの残り時間
+	float repelEffectX, repelEffectY; //エフェクトの発生位置
 
 	// ---- ステージ3専用AI変数 ----
 	bool hidden;            // 画面から消えているか
@@ -431,6 +439,9 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	pl.atkDmg = 0;
 	pl.comboWindow = 0;
 	pl.airComboLeft = 1;
+	//ステージ１のエネミーの吹き飛ばし用の変数を初期化
+	pl.knockbackTimer = 0;
+	pl.knockbackVx = 0.0f;
 
 	for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
 	for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
@@ -439,7 +450,7 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 		boss.w = 48.0f;
 		boss.h = 76.0f;
 	}
-	else if (stage == 0) { //ステージ1用
+	else if (stage == 0) { //ステージ1用のボスのサイズを設定
 		boss.w = 64.0f;
 		boss.h = 96.0f;
 	}
@@ -481,6 +492,12 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.repeatCount = 0;
 	boss.timeStopTimer = 0;
 	boss.timeStopPrepTimer = 0;
+	//ステージ１のボス用変数を初期化
+	boss.flash = 0;
+	boss.hitCount = 0;
+	boss.repelEffectTimer = 0;
+	boss.repelEffectX = 0.0f;
+	boss.repelEffectY = 0.0f;
 	if (stage == 2) {
 		RefillStage3Patterns(boss);
 	}
@@ -610,6 +627,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//ブレイクのテクスチャ
 	int jesseBreakLeftTexture = Novice::LoadTexture("./Resources/images/jesseBreakLeft.png");
 	int jesseBreakRightTexture = Novice::LoadTexture("./Resources/images/jesseBreakRight.png");
+	//吹き飛ばしのテクスチャ
+	int jesseblowoffLeftTexture = Novice::LoadTexture("./Resources/images/jesseblowoffLeft.png");
+	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
+
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
 	//ステージ１のエネミーのアニメーション用変数
@@ -837,7 +858,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 
 				bool dashing = player.dashTimer > 0;
-				if (dashing) {
+				if (player.knockbackTimer > 0) {
+					// 吹き飛ばされ中の処理
+					player.vx = player.knockbackVx;
+					player.knockbackVx *= 0.92f; // 徐々に減速
+					player.knockbackTimer--;
+				}
+				else if (dashing) {
 					player.vx = player.dashDir * 18.0f;
 					player.vy = 0.0f;
 					player.dashTimer--;
@@ -888,6 +915,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					boss.hp -= dmg;
 					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
 
+					// ステージ1でブレイク中でなければヒット数をカウント
+					if (boss.type == 0 && !boss.isBroken) {
+						boss.hitCount++;
+						if (boss.hitCount >= 10) {
+							boss.hitCount = 0; // カウントリセット
+							CancelAttack(player); //プレイヤーの攻撃を中断
+
+							// ボスから離れる方向を計算して吹き飛ばす
+							float pushDir = (player.x + player.w * 0.5f < boss.x + boss.w * 0.5f) ? -1.0f : 1.0f;
+							player.knockbackTimer = 25;       // 25フレーム間吹き飛ぶ
+							player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
+							player.vy = -12.0f;               // 少し浮き上がる
+							player.onGround = false;
+							player.invincible = 30;           // 吹き飛ばし中に連続被弾しないよう短い無敵
+							shake = 16;                       // 画面を揺らす
+							// 吹き飛ばしエフェクト
+							boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
+							boss.repelEffectX = boss.x + boss.w * 0.5f; // ボスの中心から
+							boss.repelEffectY = boss.y + boss.h * 0.5f;
+							// 吹き飛ばしアニメーションを最初のコマから再生
+							jesseAnimFrame = 0;
+							jesseAnimTimer = 0;
+						}
+					}
+
 					boss.flash = 6;
 					shake = finisher ? 16 : 6;
 					if (player.invincible < 15) player.invincible = 15;
@@ -911,7 +963,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			{
 				introTimer--;
 			}
-			else 
+			else
 			{
 				float bcx = boss.x + boss.w * 0.5f;
 				float bcy = boss.y + boss.h * 0.5f;
@@ -1656,6 +1708,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							introBats[i].active = false;
 						}
 					}
+					//吹き飛ばしエフェクトのタイマーを減らす
+					if (boss.repelEffectTimer > 0)
+					{
+						boss.repelEffectTimer--;
+					}
 				}
 				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
 
@@ -1890,6 +1947,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 			//=================================================
+			// ステージ1の吹き飛ばしエフェクトの描画
+			//=================================================
+			if (boss.type == 0 && boss.repelEffectTimer > 0) {
+				int totalFrames = 25;
+				int elapsed = totalFrames - boss.repelEffectTimer;
+				// 円の半径を大きくしていく
+				float radius = elapsed * 8.0f;
+				unsigned int alpha = static_cast<unsigned int>((boss.repelEffectTimer / static_cast<float>(totalFrames)) * 170.0f); // 0xAA(170)を最大
+				unsigned int color = 0x88CCFF00 | alpha;
+				Circle(boss.repelEffectX, boss.repelEffectY, radius, color);
+			}
+			//=================================================
 			//ステージ１のボスの描画
 			//=================================================
 			if (!boss.hidden)
@@ -1902,6 +1971,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					{
 						// ブレイク中
 						currentTex = (boss.dir == 1) ? jesseBreakRightTexture : jesseBreakLeftTexture;
+					}
+					else if (boss.repelEffectTimer > 0)
+					{
+						// 吹き飛ばし攻撃中
+						currentTex = (boss.dir == 1) ? jesseblowoffRightTexture : jesseblowoffLeftTexture;
 					}
 					else if (boss.state == 3) {
 						// チャージ・流星群攻撃中
@@ -2006,8 +2080,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					0xFFFFFFFF
 				);
 			}
-			if (boss.isBroken) {
+			if (boss.isBroken) 
+			{
 				PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
+			}
+			// 吹き飛ばし中の文字表示
+			else if (boss.type == 0 && boss.repelEffectTimer > 0) 
+			{
+				float centerX = boss.x + boss.w * 0.5f;
+				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "ハナレテ！");
 			}
 			// ステージ1のチャージ中演出
 			else if (boss.type == 0 && boss.state == 3) {
@@ -2015,7 +2096,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float centerY = boss.y + boss.h * 0.5f;
 				float effectSize = 60.0f + (frame % 20) * 2.0f;
 				Circle(centerX, centerY, effectSize, 0xAA66FF55);
-				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "メテオコウゲキ");
+				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "メテオコウゲキ！");
 				//画面上部に警告画像を3つ表示 
 				const int kCaveatW = 256;
 				const int kCaveatY = 90;
