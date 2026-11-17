@@ -21,16 +21,18 @@ const float kMoveSpeed = 6.0f;
 const float kJumpPower = -17.0f;
 const float kMaxFall = 20.0f;
 const float kPi = 3.14159265f;
-
-const int kMaxEBullets = 256; // ステージ3の弾幕用に拡張
-const int kMaxLasers = 32;    // ステージ3のレーザー用
+// ステージ3の弾幕用に拡張
+const int kMaxEBullets = 256; 
+// ステージ3のレーザー用
+const int kMaxLasers = 32;    
 const int kPlatformNum = 4;
 
 const int kPlayerMaxHp = 5;
 const int kIntroFrames = 120;
-const int kTotalStages = 3; // ステージ数
-
-const int kBreakDuration = 360; // ブレイク時の行動停止フレーム数 (3秒)
+// ステージ数
+const int kTotalStages = 3;
+// ブレイク時の行動停止フレーム数 (3秒)
+const int kBreakDuration = 360; 
 
 // ==================================================
 // 構造体
@@ -126,6 +128,8 @@ struct Boss {
 	int hitCount;      //ステージ1の吹き飛ばしカウンター用
 	int repelEffectTimer; //吹き飛ばしエフェクトの残り時間
 	float repelEffectX, repelEffectY; //エフェクトの発生位置
+	float aimAngle;        //照準レーザーの角度
+	int muzzleFlashTimer;  //発射時の光の輪の残り時間
 
 	// ---- ステージ3専用AI変数 ----
 	bool hidden;            // 画面から消えているか
@@ -498,6 +502,8 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.repelEffectTimer = 0;
 	boss.repelEffectX = 0.0f;
 	boss.repelEffectY = 0.0f;
+	boss.aimAngle = 0.0f;
+	boss.muzzleFlashTimer = 0;
 	if (stage == 2) {
 		RefillStage3Patterns(boss);
 	}
@@ -910,8 +916,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (introTimer == 0 && !boss.hidden && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 					bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
 					player.atkHit = true;
-
-					int dmg = boss.isBroken ? static_cast<int>(player.atkDmg * 1.5f) : player.atkDmg;
+					//==========================================
+					// ブレイク処理
+					// =========================================
+					// ステージ1でブレイクしていない時はダメージがほとんど通らない
+					int dmg = player.atkDmg;
+					if (boss.isBroken) 
+					{
+						dmg = static_cast<int>(player.atkDmg * 1.5f);
+					}
+					else if (boss.type == 0) 
+					{
+						// 全く入らない（0）にしたい場合は dmg = 0; にする
+						dmg = player.atkDmg / 10; 
+					}
 					boss.hp -= dmg;
 					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
 
@@ -994,8 +1012,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				else {
 					if (boss.type == 0) {
 						// ==========================================
-						// ステージ1 スナイパー型 ボスAI（チャージ＆流星群攻撃を含む）
+						// ステージ1 スナイパー型 ボスAI
 						// ==========================================
+						if (boss.muzzleFlashTimer > 0) boss.muzzleFlashTimer--;
 						switch (boss.state) {
 						case 0:
 							boss.dir = (pcx > bcx) ? 1 : -1;
@@ -1003,25 +1022,53 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							boss.timer--;
 							if (boss.timer <= 0) {
 								int pick = rand() % 3;
-								if (pick == 0) { boss.state = 1; boss.timer = 50; }
-								else if (pick == 1) { boss.state = 2; boss.timer = 70; }
+								if (pick == 0) {
+									boss.state = 1;
+									boss.timer = 70;
+									boss.aimAngle = aim;
+								}
+								else if (pick == 1) {
+									boss.state = 2;
+									boss.timer = 70;
+									boss.aimAngle = aim;
+								}
 								else {
 									boss.state = 3;
 									boss.timer = 100;
-									boss.isRareMeteor = (rand() % 7 == 0); // ← 攻撃開始時に1回だけ7分の1で抽選
+									boss.isRareMeteor = (rand() % 7 == 0);
 								}
 							}
 							break;
 						case 1:
+							// 連射攻撃
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							if (boss.timer > 45) {
+								// プレイヤーを追尾して狙う
+								boss.aimAngle = aim;
+							}
+							else if (boss.timer > 0 && boss.timer % 15 == 0) {
+								boss.aimAngle = aim;
+								FireAngle(ebullets, bcx, bcy - 20.0f, boss.aimAngle, 9.0f, 8.0f);
+								boss.x -= boss.dir * 8.0f; // 発射の反動で後ろに下がる
+								boss.muzzleFlashTimer = 6; // マズルフラッシュ点灯
+							}
 							boss.timer--;
-							if (boss.timer % 15 == 0) FireAngle(ebullets, bcx, bcy - 20.0f, aim, 9.0f, 8.0f);
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
 							break;
 						case 2:
-							boss.timer--;
-							if (boss.timer == 35) {
-								for (int i = -1; i <= 1; i++) FireAngle(ebullets, bcx, bcy, aim + i * 0.2f, 7.0f, 10.0f);
+							// 3弾
+							boss.dir = (pcx > bcx) ? 1 : -1;
+							if (boss.timer > 35) {
+								boss.aimAngle = aim;
 							}
+							else if (boss.timer == 35) {
+								for (int i = -1; i <= 1; i++) {
+									FireAngle(ebullets, bcx, bcy - 10.0f, boss.aimAngle + i * 0.2f, 7.0f, 10.0f);
+								}
+								boss.x -= boss.dir * 14.0f; // 3弾は少し大きめの反動
+								boss.muzzleFlashTimer = 8;
+							}
+							boss.timer--;
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
 							break;
 						case 3:
@@ -1031,7 +1078,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								boss.x += boss.dir * 1.5f;
 							}
 							boss.timer--;
-							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 4 == 0) {
+							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 3 == 0) {
 								float startX = static_cast<float>(rand() % kScreenW);
 								float targetX = static_cast<float>(rand() % kScreenW);
 								float meteorVx = (targetX - startX) / 55.0f;
@@ -2080,15 +2127,52 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					0xFFFFFFFF
 				);
 			}
-			if (boss.isBroken) 
+			if (boss.isBroken)
 			{
 				PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
 			}
 			// 吹き飛ばし中の文字表示
-			else if (boss.type == 0 && boss.repelEffectTimer > 0) 
+			else if (boss.type == 0 && boss.repelEffectTimer > 0)
 			{
 				float centerX = boss.x + boss.w * 0.5f;
 				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "ハナレテ！");
+			}
+			// ステージ1の通常射撃（連射・3弾）の照準レーザー＆テキスト演出
+			else if (boss.type == 0 && (boss.state == 1 || boss.state == 2)) {
+				float centerX = boss.x + boss.w * 0.5f;
+				float muzzleX = centerX + boss.dir * 24.0f;
+				float muzzleY = boss.y + boss.h * 0.5f - 15.0f;
+				// 頭上テキスト表示
+				if (boss.state == 1) {
+					PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "レンシャ！");
+				}
+				else {
+					PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "カクサン！");
+				}
+				// 発射前の照準レーザー（赤い予告線）
+				bool isAiming = (boss.state == 1 && boss.timer > 45) || (boss.state == 2 && boss.timer > 35);
+				if (isAiming) {
+					int wayCount = (boss.state == 2) ? 1 : 0;
+					for (int i = -wayCount; i <= wayCount; i++) {
+						float rayAng = boss.aimAngle + i * 0.2f;
+						float endX = muzzleX + cosf(rayAng) * 1400.0f;
+						float endY = muzzleY + sinf(rayAng) * 1400.0f;
+						Novice::DrawLine(
+							static_cast<int>(muzzleX) + gShakeX,
+							static_cast<int>(muzzleY) + gShakeY,
+							static_cast<int>(endX) + gShakeX,
+							static_cast<int>(endY) + gShakeY,
+							0xFF3344AA
+						);
+					}
+				}
+
+				// 発射瞬間のマズルフラッシュ
+				if (boss.muzzleFlashTimer > 0) {
+					float flashR = boss.muzzleFlashTimer * 3.5f;
+					Circle(muzzleX, muzzleY, flashR, 0xFFEE55CC);
+					Circle(muzzleX, muzzleY, flashR * 0.5f, 0xFFFFFFFF);
+				}
 			}
 			// ステージ1のチャージ中演出
 			else if (boss.type == 0 && boss.state == 3) {
@@ -2229,10 +2313,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			float pcx2 = player.x + player.w * 0.5f;
 			float pcy2 = player.y + player.h * 0.5f;
-			if (player.parryTimer > 0) {
+			if (player.parryTimer > 0) 
+			{
 				Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
 			}
-			if (player.parryFlash > 0) {
+			if (player.parryFlash > 0) 
+			{
 				Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
 			}
 
