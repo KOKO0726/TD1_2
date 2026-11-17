@@ -1192,16 +1192,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						case 6:
 							// 画面反転攻撃
 							if (!isReverseAttackUsed) {
-								isScreenReversex = true;
-								isScreenReversey = true;
+								isScreenReversex = !isScreenReversex;
+								isScreenReversey = !isScreenReversey;
+
 								isReverseAttackUsed = true;
 							}
-
 							boss.timer--;
-
 							if (boss.timer <= 0) {
 								boss.state = 0;
 								boss.timer = 90;
+								// 次の反転攻撃に備える
+								isReverseAttackUsed = false;
 							}
 							break;
 						}
