@@ -643,6 +643,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
 	//足場のテクスチャ
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
+	//背景のテクスチャ
+	int backgroundTexture = Novice::LoadTexture("./Resources/images/background.png");
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
 	//ステージ１のエネミーのアニメーション用変数
