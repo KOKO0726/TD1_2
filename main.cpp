@@ -190,8 +190,24 @@ static void PrintfCenter(int centerX, int y, const char* format, ...) {
 	GetFont().Draw(centerX - GetFont().Width(buf) / 2, y, buf);
 }
 //ステージ２ 画面反転用の関数
-bool isScreenReverse = false;
+bool isScreenReversex = false;
+bool isScreenReversey = false;
 bool isReverseAttackUsed = false;
+///ステージ２　反転させるためのあれ
+		// X座標を反転
+float ReverseX(float x, float w = 0.0f) {
+	if (isScreenReversex) {
+		return kScreenW - x - w;
+	}
+	return x;
+}
+// Y座標を反転
+float ReverseY(float y, float h = 0.0f) {
+	if (isScreenReversey) {
+		return kScreenH - y - h;
+	}
+	return y;
+}
 
 // ==================================================
 // 共通関数
@@ -1113,28 +1129,29 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					else if (boss.type == 1) {
 						switch (boss.state) {
 						case 0:
-							/*if (!isReverseAttackUsed) { isScreenReverse = true; isReverseAttackUsed = true; }
-							int drawX = (int)player.x;
-							int drawY = (int)player.y;
 
-							float rotate = 0.0f;*/
+							if (boss.timer <= 0) {
+								int pick = rand() % 4;
 
-							/*	if (isScreenReverse) {
-									drawX = kScreenW - player.x - player.w;
-									drawY = kScreenH - player.y - player.h;
+								if (pick == 0) {
+									boss.state = 2;
+									boss.timer = 25;
 								}
-
-								Rect(drawX, drawY, player.w, player.h, 0x4AA8FFFF);
-	*/
-
-
-
+								else if (pick == 1 || pick == 2) {
+									boss.state = 3;
+									boss.timer = 25;
+								}
+								else {
+									boss.state = 6;
+									boss.timer = 60;
+								}
+							}
 						case 1:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 2.5f;
 							boss.timer--;
 							if (boss.timer <= 0) {
-								boss.state = (rand() % 3 == 0) ? 2 : 3;
+								boss.state = (rand() % 3 == 0) ? 2 : 3;//ここで	ランダムに攻撃を決めてるんだねぇ
 								if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
 								else { boss.timer = 25; }
 							}
@@ -1171,6 +1188,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						case 5:
 							boss.timer--;
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+							break;
+						case 6:
+							// 画面反転攻撃
+							if (!isReverseAttackUsed) {
+								isScreenReversex = true;
+								isScreenReversey = true;
+								isReverseAttackUsed = true;
+							}
+
+							boss.timer--;
+
+							if (boss.timer <= 0) {
+								boss.state = 0;
+								boss.timer = 90;
+							}
 							break;
 						}
 					}
@@ -2025,6 +2057,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
 			}
 		}
+
+	
+
+
 
 		if (scene == kPlay) {
 			unsigned int bodyColor = 0;
