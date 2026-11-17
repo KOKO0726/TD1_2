@@ -115,19 +115,19 @@ struct Boss {
 	int hp;
 	int maxHp;
 	// 現在のブレイクゲージ
-	int breakGauge;    
+	int breakGauge;
 	// 最大ブレイクゲージ
-	int maxBreakGauge; 
+	int maxBreakGauge;
 	// ブレイク状態か
-	bool isBroken;     
+	bool isBroken;
 	// ブレイク残り時間
-	int breakTimer;    
+	int breakTimer;
 	int state;
 	int timer;
 	int dir;
 	int flash;
 	// 0:スナイパー, 1:クラッシャー, 2:ウィザード
-	int type; 
+	int type;
 	//ステージ１のボス用変数
 	bool isRareMeteor; //今回のメテオ攻撃がレアか
 	int hitCount;      //ステージ1の吹き飛ばしカウンター用
@@ -644,7 +644,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//足場のテクスチャ
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
 	//背景のテクスチャ
-	int backgroundTexture = Novice::LoadTexture("./Resources/images/background.png");
+	int backGroundTexture = Novice::LoadTexture("./Resources/images/background.png");
+	//背景の地面テクスチャ
+	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
 	//ステージ１のエネミーのアニメーション用変数
@@ -1971,17 +1973,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 
-		if (scene == kPlay && boss.type == 2 && boss.timeStopTimer > 0) {
-			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x0A0518CC, kFillModeSolid);
+		if ((scene == kPlay || scene == kGameOver || scene == kVictory) && currentStage == 0) {
+			// ステージ1の背景画像
+			Novice::DrawSprite(
+				gShakeX,
+				gShakeY,
+				backGroundTexture,
+				1.0f,
+				1.0f,
+				0.0f,
+				0xFFFFFFFF
+			);
+		}
+		else {
+			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 		}
 
 		for (int i = 0; i < activePlatformNum; i++) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
 
-			if (currentStage == 0 && i > 0)
-
-			{
-				//ステージ１の足場テクスチャ描画
+			if (currentStage == 0 && i == 0) {
+				// ステージ1の地面テクスチャ描画（1280x80想定）
+				Novice::DrawSprite(
+					static_cast<int>(platforms[i].x) + gShakeX,
+					static_cast<int>(platforms[i].y) + gShakeY,
+					groundTexture,
+					1.0f,
+					1.0f,
+					0.0f,
+					0xFFFFFFFF
+				);
+			}
+			else if (currentStage == 0 && i > 0) {
+				// ステージ1の足場テクスチャ描画
 				Novice::DrawSprite(
 					static_cast<int>(platforms[i].x) + gShakeX,
 					static_cast<int>(platforms[i].y) + gShakeY,
