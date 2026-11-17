@@ -187,7 +187,7 @@ static void PrintfCenter(int centerX, int y, const char* format, ...) {
 	va_end(args);
 	GetFont().Draw(centerX - GetFont().Width(buf) / 2, y, buf);
 }
-
+//ステージ２ 画面反転用の関数
 bool isScreenReverse = false;
 bool isReverseAttackUsed = false;
 
@@ -1099,6 +1099,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							break;
 						}
 					}
+
+					////ステージ２
 					else if (boss.type == 1) {
 						switch (boss.state) {
 						case 0:
