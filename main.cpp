@@ -22,9 +22,9 @@ const float kJumpPower = -17.0f;
 const float kMaxFall = 20.0f;
 const float kPi = 3.14159265f;
 // ステージ3の弾幕用に拡張
-const int kMaxEBullets = 256; 
+const int kMaxEBullets = 256;
 // ステージ3のレーザー用
-const int kMaxLasers = 32;    
+const int kMaxLasers = 32;
 const int kPlatformNum = 4;
 
 const int kPlayerMaxHp = 5;
@@ -32,7 +32,7 @@ const int kIntroFrames = 120;
 // ステージ数
 const int kTotalStages = 3;
 // ブレイク時の行動停止フレーム数 (3秒)
-const int kBreakDuration = 360; 
+const int kBreakDuration = 360;
 
 // ==================================================
 // 構造体
@@ -114,15 +114,20 @@ struct Boss {
 	float vx, vy;
 	int hp;
 	int maxHp;
-	int breakGauge;    // 現在のブレイクゲージ
-	int maxBreakGauge; // 最大ブレイクゲージ
-	bool isBroken;     // ブレイク状態か
-	int breakTimer;    // ブレイク残り時間
+	// 現在のブレイクゲージ
+	int breakGauge;    
+	// 最大ブレイクゲージ
+	int maxBreakGauge; 
+	// ブレイク状態か
+	bool isBroken;     
+	// ブレイク残り時間
+	int breakTimer;    
 	int state;
 	int timer;
 	int dir;
 	int flash;
-	int type; // 0:スナイパー, 1:クラッシャー, 2:ウィザード
+	// 0:スナイパー, 1:クラッシャー, 2:ウィザード
+	int type; 
 	//ステージ１のボス用変数
 	bool isRareMeteor; //今回のメテオ攻撃がレアか
 	int hitCount;      //ステージ1の吹き飛ばしカウンター用
@@ -636,7 +641,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//吹き飛ばしのテクスチャ
 	int jesseblowoffLeftTexture = Novice::LoadTexture("./Resources/images/jesseblowoffLeft.png");
 	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
-
+	//足場のテクスチャ
+	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
 	//ステージ１のエネミーのアニメーション用変数
@@ -921,14 +927,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					// =========================================
 					// ステージ1でブレイクしていない時はダメージがほとんど通らない
 					int dmg = player.atkDmg;
-					if (boss.isBroken) 
+					if (boss.isBroken)
 					{
 						dmg = static_cast<int>(player.atkDmg * 1.5f);
 					}
-					else if (boss.type == 0) 
+					else if (boss.type == 0)
 					{
 						// 全く入らない（0）にしたい場合は dmg = 0; にする
-						dmg = player.atkDmg / 10; 
+						dmg = player.atkDmg / 10;
 					}
 					boss.hp -= dmg;
 					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
@@ -1967,7 +1973,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		for (int i = 0; i < activePlatformNum; i++) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
-			Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
+
+			if (currentStage == 0 && i > 0)
+
+			{
+				//ステージ１の足場テクスチャ描画
+				Novice::DrawSprite(
+					static_cast<int>(platforms[i].x) + gShakeX,
+					static_cast<int>(platforms[i].y) + gShakeY,
+					scaffoldTexture,
+					1.0f,
+					1.0f,
+					0.0f,
+					0xFFFFFFFF
+				);
+			}
+			else {
+				Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
+			}
 		}
 
 		if (scene == kPlay) {
@@ -2313,11 +2336,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			float pcx2 = player.x + player.w * 0.5f;
 			float pcy2 = player.y + player.h * 0.5f;
-			if (player.parryTimer > 0) 
+			if (player.parryTimer > 0)
 			{
 				Circle(pcx2, pcy2, 46.0f, 0x66FFFF80);
 			}
-			if (player.parryFlash > 0) 
+			if (player.parryFlash > 0)
 			{
 				Circle(pcx2, pcy2, 50.0f + (10 - player.parryFlash) * 5.0f, 0xFFFFFF60);
 			}
