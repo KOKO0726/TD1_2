@@ -31,6 +31,8 @@ const int kPlayerMaxHp = 5;
 const int kIntroFrames = 120;
 // ステージ数
 const int kTotalStages = 3;
+
+const float kBreakDamageMultipliers[kTotalStages] = { 1.5f, 2.0f, 2.5f };
 // ブレイク時の行動停止フレーム数 (3秒)
 const int kBreakDuration = 360;
 
@@ -472,11 +474,11 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.vx = boss.vy = 0.0f;
 	boss.type = stage;
 
-	const int bossHpTable[kTotalStages] = { 5000, 6500, 8000 };
+	const int bossHpTable[kTotalStages] = { 5000, 6500, 20000 };
 	boss.maxHp = bossHpTable[stage];
 	boss.hp = boss.maxHp;
 
-	const int bossBreakTable[kTotalStages] = { 2000, 2500, 3000 };
+	const int bossBreakTable[kTotalStages] = { 2000, 2500, 1500 };
 	boss.maxBreakGauge = bossBreakTable[stage];
 	boss.breakGauge = boss.maxBreakGauge;
 	boss.isBroken = false;
@@ -939,6 +941,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					{
 						// 全く入らない（0）にしたい場合は dmg = 0; にする
 						dmg = player.atkDmg / 10;
+					}
+					else if (boss.type == 2) {
+						dmg = player.atkDmg / 3;
 					}
 					boss.hp -= dmg;
 					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
