@@ -667,10 +667,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
-
+	//=================================================
+	// BGM
+	// =================================================
 	//ステージ１のBGM
 	int jesseBgmSound = Novice::LoadAudio("./Resources/bgm/stage1.MP3");
 	int jesseBgmHandle = -1;
+	//=================================================
+	// 効果音
+	// =================================================
+	//ステージ１の効果音
+	int jesseToTakeastnceSound = Novice::LoadAudio("./Resources/sound/Totakeastance.MP3");
+	int jesseshotSound = Novice::LoadAudio("./Resources/sound/shot.MP3");
+	
+	int jesseToTakeastnceHandle = -1;
+	int jesseshotHandle = -1;
 
 	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
@@ -1078,11 +1089,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									boss.state = 1;
 									boss.timer = 70;
 									boss.aimAngle = aim;
+									// 構えた時の音を再生
+									jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
 								}
 								else if (pick == 1) {
 									boss.state = 2;
 									boss.timer = 70;
 									boss.aimAngle = aim;
+									// 構えた時の音を再生
+									jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
 								}
 								else {
 									boss.state = 3;
@@ -1101,6 +1116,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							else if (boss.timer > 0 && boss.timer % 15 == 0) {
 								boss.aimAngle = aim;
 								FireAngle(ebullets, bcx, bcy - 20.0f, boss.aimAngle, 9.0f, 8.0f);
+								// 発射音を再生
+								jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
 								boss.x -= boss.dir * 8.0f; // 発射の反動で後ろに下がる
 								boss.muzzleFlashTimer = 6; // マズルフラッシュ点灯
 							}
@@ -1113,7 +1130,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							if (boss.timer > 35) {
 								boss.aimAngle = aim;
 							}
-							else if (boss.timer == 35) {
+							else if (boss.timer == 35) 
+							{
+								// 発射音を再生
+								jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
 								for (int i = -1; i <= 1; i++) {
 									FireAngle(ebullets, bcx, bcy - 10.0f, boss.aimAngle + i * 0.2f, 7.0f, 10.0f);
 								}
