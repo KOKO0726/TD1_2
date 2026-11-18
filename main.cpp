@@ -667,6 +667,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
 	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
+
+	//ステージ１のBGM
+	int jesseBgmSound = Novice::LoadAudio("./Resources/bgm/stage1.MP3");
+	int jesseBgmHandle = -1;
+
 	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
 	const int kJesseFrameHeight = 96;
@@ -736,6 +741,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				selectedStage = (selectedStage + 1) % kTotalStages;
 			}
 			if (pressStart) {
+				// 前のBGMが鳴っていたら止める
+				if (Novice::IsPlayingAudio(jesseBgmHandle))
+				{
+					Novice::StopAudio(jesseBgmHandle);
+				}
 				currentStage = selectedStage;
 				ResetGame(player, ebullets, lasers, boss, groundY, currentStage);
 				for (int i = 0; i < kMaxDamagePopups; i++) popups[i].timer = 0;
@@ -760,7 +770,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		// ゲームオーバー・クリア画面の処理
-		else if (scene == kGameOver || scene == kVictory) {
+		else if (scene == kGameOver || scene == kVictory) 
+		{
+			if (Novice::IsPlayingAudio(jesseBgmHandle)) 
+			{
+				// 前のBGMが鳴っていたら止める
+				Novice::StopAudio(jesseBgmHandle);
+			}
 			shake = 0;
 			gShakeX = 0;
 			gShakeY = 0;
@@ -1007,10 +1023,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 			}
-
 			if (introTimer > 0)
 			{
 				introTimer--;
+				// コウモリが飛び始めた瞬間にBGMをループ再生
+				if (currentStage == 0 && introTimer == 80) {
+					if (!Novice::IsPlayingAudio(jesseBgmHandle)) {
+						jesseBgmHandle = Novice::PlayAudio(jesseBgmSound, true, 0.5f);
+					}
+				}
 			}
 			else
 			{
@@ -2189,7 +2210,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 						Rect(boss.x + boss.w * 0.5f - 8.0f, drawY - 18.0f, 16.0f, 18.0f, 0xDD99FFFF);
 					}
-					else {
+					else 
+					{
 						float eyeY = drawY + 40.0f;
 						float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
 						Rect(eyeX, eyeY, 20.0f, 20.0f, 0xFFFFFFFF);
@@ -2378,8 +2400,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 					}
 				}
-				else {
-					Circle(b.x, b.y, b.r, boss.type == 0 ? 0x00FF88FF : 0xFF8800FF);
+				else 
+				{
+					// ステージ1のエネミーの弾の描画
+					Circle(b.x, b.y, b.r, boss.type == 0 ? 0xFF55AAFF : 0xFF8800FF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 			}
