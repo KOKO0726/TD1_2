@@ -1068,7 +1068,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					shake = finisher ? 16 : 6;
 					if (player.invincible < 15) player.invincible = 15;
 
-					if (boss.type != 2) {
+					//ブレイク中ノックバックしない
+					if (boss.type != 2 && !(boss.type == 0 && boss.isBroken)) 
+					{
 						float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
 						boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
 					}
@@ -2223,6 +2225,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				unsigned int color = 0x88CCFF00 | alpha;
 				Circle(boss.repelEffectX, boss.repelEffectY, radius, color);
 			}
+			// 危険オーラと！！を表示
+			if (boss.type == 0 && !boss.isBroken && boss.hitCount >= 7) {
+				float centerX = boss.x + boss.w * 0.5f;
+				float centerY = boss.y + boss.h * 0.5f;
+				int level = boss.hitCount - 6; // 7→1, 8→2, 9→3
+				float warnRadius = 40.0f + level * 15.0f + (frame % 6) * 2.0f;
+				unsigned int warnAlpha = 0x30 + level * 0x20;
+				Circle(centerX, centerY, warnRadius, 0xFF332200 | warnAlpha);
+			}
 			//=================================================
 			//ステージ１のボスの描画
 			//=================================================
@@ -2350,7 +2361,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			{
 				if (boss.type == 0) {
 					// ステージ1専用のブレイク中テキスト
-					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BERAKE!!");
+					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!!");
 				}
 				else {
 					// ステージ2・3のテキスト
