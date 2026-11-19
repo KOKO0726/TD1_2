@@ -441,6 +441,9 @@ static int PopStage3Pattern(Boss& boss) {
 }
 
 static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, float groundY, int stage) {
+	isScreenReversex = false;
+	isScreenReversey = false;
+	isReverseAttackUsed = false;
 	pl.x = 200.0f;
 	pl.y = groundY - 48.0f;
 	pl.vx = pl.vy = 0.0f;
