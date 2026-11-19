@@ -815,11 +815,42 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (keys[DIK_A]) {
 					player.vx = -kMoveSpeed;
 					player.dir = -1;
+					if (isScreenReversex)
+					{
+						player.vx = kMoveSpeed;
+						player.dir = 1;
+					}
 				}
 				if (keys[DIK_D]) {
 					player.vx = kMoveSpeed;
 					player.dir = 1;
+					if (isScreenReversex )
+					{
+						player.vx = -kMoveSpeed;
+						player.dir = -1;
+					}
 				}
+
+		/*		bool isrevarscontlol = (boss.type == 1);
+				if (isReverseAttackUsed= true)
+				{
+					if (keys[DIK_A]) {
+						player.vx = kMoveSpeed;
+						player.dir = 1;
+					}
+					if (keys[DIK_D]) {
+						player.vx = -kMoveSpeed;
+						player.dir = -1;
+					}
+
+
+				}*/
+
+					
+
+				//=====================///
+				///プレイヤー操作（共通)///
+				//=====================///
 
 				bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
 				bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
@@ -1275,6 +1306,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							break;
 						}
 					}
+					////反転攻撃が来た場合の移動処理（ステージ２のみ使用）
+					//if (isReverseAttackUsed = true) {
+					//	if (keys[DIK_A]) {
+					//		player.vx = kMoveSpeed;
+					//		player.dir = 1;
+					//	}
+					//	if (keys[DIK_D]) {
+					//		player.vx = -kMoveSpeed;
+					//		player.dir = -1;
+					//	}
+					//}
+
+
+
 					else {
 						// ==========================================
 						// ステージ3 ウィザード型 ボスAI
