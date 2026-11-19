@@ -679,9 +679,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//ステージ１の効果音
 	int jesseToTakeastnceSound = Novice::LoadAudio("./Resources/sound/Totakeastance.MP3");
 	int jesseshotSound = Novice::LoadAudio("./Resources/sound/shot.MP3");
-	
+	//ブレイクの効果音
+	int jesseBreakSound = Novice::LoadAudio("./Resources/sound/break.MP3");
+	//吹き飛ばしの効果音
+	int jesseBlowoffSound = Novice::LoadAudio("./Resources/sound/blowoff.MP3");
+	//メテオの効果音
+	int jesseMeteorSound = Novice::LoadAudio("./Resources/sound/meteor.MP3");
+	//チャージ中の効果音
+	int jesseChargeSound = Novice::LoadAudio("./Resources/sound/meteorCharge.MP3");
+
 	int jesseToTakeastnceHandle = -1;
 	int jesseshotHandle = -1;
+	int jesseBreakHandle = -1;
+	int jesseBlowoffHandle = -1;
+	int jesseMeteorHandle = -1;
+	int jesseChargeHandle = -1;
 
 	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
@@ -1000,12 +1012,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 							// ボスから離れる方向を計算して吹き飛ばす
 							float pushDir = (player.x + player.w * 0.5f < boss.x + boss.w * 0.5f) ? -1.0f : 1.0f;
-							player.knockbackTimer = 25;       // 25フレーム間吹き飛ぶ
+							player.knockbackTimer = 25;
 							player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
-							player.vy = -12.0f;               // 少し浮き上がる
+							player.vy = -12.0f;
 							player.onGround = false;
-							player.invincible = 30;           // 吹き飛ばし中に連続被弾しないよう短い無敵
-							shake = 16;                       // 画面を揺らす
+							player.invincible = 30;//短い無敵
+							shake = 16;// 画面を揺らす
 							// 吹き飛ばしエフェクト
 							boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
 							boss.repelEffectX = boss.x + boss.w * 0.5f; // ボスの中心から
@@ -1013,6 +1025,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							// 吹き飛ばしアニメーションを最初のコマから再生
 							jesseAnimFrame = 0;
 							jesseAnimTimer = 0;
+							// 吹き飛ばしの音を再生
+							jesseBlowoffHandle = Novice::PlayAudio(jesseBlowoffSound, false, 0.7f);
 						}
 					}
 
@@ -1103,6 +1117,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									boss.state = 3;
 									boss.timer = 100;
 									boss.isRareMeteor = (rand() % 7 == 0);
+									// チャージ中の音を再生
+									jesseChargeHandle = Novice::PlayAudio(jesseChargeSound, false, 0.7f);
 								}
 							}
 							break;
@@ -1146,6 +1162,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						case 3:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							// チャージ中
+							// メテオが降り始める瞬間にチャージ音を止める
+							if (boss.timer == 40) 
+							{
+								if (Novice::IsPlayingAudio(jesseChargeHandle)) 
+								{
+									Novice::StopAudio(jesseChargeHandle);
+								}
+							}
+							// メテオ降下中は少し移動
 							if (boss.timer <= 40) {
 								boss.x += boss.dir * 1.5f;
 							}
@@ -1156,6 +1181,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								float meteorVx = (targetX - startX) / 55.0f;
 								// 今回のメテオ攻撃がレアなら全部レアメテオになる
 								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
+								// メテオの音を再生
+								jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 0.7f);
 							}
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
 							break;
@@ -1937,7 +1964,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								int dmg = boss.isBroken ? static_cast<int>(baseParryDmg * 1.5f) : baseParryDmg;
 								boss.hp -= dmg;
 								SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
+								bool wasBroken = boss.isBroken; // ← 1. ダメージ前の状態を記録
 								DamageBossBreak(boss, 150, shake);
+								//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
+								if (!wasBroken && boss.isBroken && boss.type == 0) {
+									jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 0.8f);
+									// もしチャージ中だったらチャージ音も止める
+									if (Novice::IsPlayingAudio(jesseChargeHandle)) {
+										Novice::StopAudio(jesseChargeHandle);
+									}
+								}
 								boss.flash = 10;
 								shake = 8;
 							}
