@@ -793,9 +793,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		// ゲームオーバー・クリア画面の処理
-		else if (scene == kGameOver || scene == kVictory) 
+		else if (scene == kGameOver || scene == kVictory)
 		{
-			if (Novice::IsPlayingAudio(jesseBgmHandle)) 
+			if (Novice::IsPlayingAudio(jesseBgmHandle))
 			{
 				// 前のBGMが鳴っていたら止める
 				Novice::StopAudio(jesseBgmHandle);
@@ -824,33 +824,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (keys[DIK_D]) {
 					player.vx = kMoveSpeed;
 					player.dir = 1;
-					if (isScreenReversex )
+					if (isScreenReversex)
 					{
 						player.vx = -kMoveSpeed;
 						player.dir = -1;
 					}
 				}
 
-		/*		bool isrevarscontlol = (boss.type == 1);
-				if (isReverseAttackUsed= true)
-				{
-					if (keys[DIK_A]) {
-						player.vx = kMoveSpeed;
-						player.dir = 1;
-					}
-					if (keys[DIK_D]) {
-						player.vx = -kMoveSpeed;
-						player.dir = -1;
-					}
+				/*		bool isrevarscontlol = (boss.type == 1);
+						if (isReverseAttackUsed= true)
+						{
+							if (keys[DIK_A]) {
+								player.vx = kMoveSpeed;
+								player.dir = 1;
+							}
+							if (keys[DIK_D]) {
+								player.vx = -kMoveSpeed;
+								player.dir = -1;
+							}
 
 
-				}*/
+						}*/
 
-					
 
-				//=====================///
-				///プレイヤー操作（共通)///
-				//=====================///
+
+						//=====================///
+						///プレイヤー操作（共通)///
+						//=====================///
 
 				bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
 				bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
@@ -1177,7 +1177,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							if (boss.timer > 35) {
 								boss.aimAngle = aim;
 							}
-							else if (boss.timer == 35) 
+							else if (boss.timer == 35)
 							{
 								// 発射音を再生
 								jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
@@ -1194,9 +1194,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							// チャージ中
 							// メテオが降り始める瞬間にチャージ音を止める
-							if (boss.timer == 40) 
+							if (boss.timer == 40)
 							{
-								if (Novice::IsPlayingAudio(jesseChargeHandle)) 
+								if (Novice::IsPlayingAudio(jesseChargeHandle))
 								{
 									Novice::StopAudio(jesseChargeHandle);
 								}
@@ -1246,7 +1246,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								}
 								//break;
 							}
-						
+
 						case 1:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 2.5f;
@@ -2008,12 +2008,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						if (b.reflected) {
 							if (!boss.hidden && HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
 								b.active = false;
-								int baseParryDmg = 100;
-								int dmg = boss.isBroken ? static_cast<int>(baseParryDmg * 1.5f) : baseParryDmg;
-								boss.hp -= dmg;
-								SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
-								bool wasBroken = boss.isBroken; // ← 1. ダメージ前の状態を記録
+								bool wasBroken = boss.isBroken;
 								DamageBossBreak(boss, 150, shake);
+
 								//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
 								if (!wasBroken && boss.isBroken && boss.type == 0) {
 									jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 0.8f);
@@ -2184,7 +2181,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 
-	
+
 
 
 
@@ -2314,7 +2311,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 						Rect(boss.x + boss.w * 0.5f - 8.0f, drawY - 18.0f, 16.0f, 18.0f, 0xDD99FFFF);
 					}
-					else 
+					else
 					{
 						float eyeY = drawY + 40.0f;
 						float eyeX = (boss.dir == 1) ? boss.x + boss.w - 70.0f : boss.x + 20.0f;
@@ -2348,7 +2345,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 			if (boss.isBroken)
 			{
-				PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
+				if (boss.type == 0) {
+					// ステージ1専用のブレイク中テキスト
+					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BERAKE!!");
+				}
+				else {
+					// ステージ2・3のテキスト
+					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
+				}
 			}
 			// 吹き飛ばし中の文字表示
 			else if (boss.type == 0 && boss.repelEffectTimer > 0)
@@ -2504,7 +2508,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 					}
 				}
-				else 
+				else
 				{
 					// ステージ1のエネミーの弾の描画
 					Circle(b.x, b.y, b.r, boss.type == 0 ? 0xFF55AAFF : 0xFF8800FF);
@@ -2522,18 +2526,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
 				Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
 			}
-	/*		float eyeXp = (player.dir == 1)
-				? player.x + 20.0f
-				: player.x + 4.0f;
+			/*		float eyeXp = (player.dir == 1)
+						? player.x + 20.0f
+						: player.x + 4.0f;
 
-			Rect(
-				ReverseX(eyeXp, 8.0f),
-				ReverseY(player.y + 10.0f, 8.0f),
-				8.0f,
-				8.0f,
-				0xFFFFFFFF
-			);
-*/
+					Rect(
+						ReverseX(eyeXp, 8.0f),
+						ReverseY(player.y + 10.0f, 8.0f),
+						8.0f,
+						8.0f,
+						0xFFFFFFFF
+					);
+		*/
 
 
 
