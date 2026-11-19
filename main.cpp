@@ -1244,13 +1244,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									boss.state = 6;
 									boss.timer = 60;
 								}
+								//break;
 							}
+						
 						case 1:
 							boss.dir = (pcx > bcx) ? 1 : -1;
 							boss.x += boss.dir * 2.5f;
 							boss.timer--;
 							if (boss.timer <= 0) {
-								boss.state = (rand() % 3 == 0) ? 2 : 3;//ここで	ランダムに攻撃を決めてるんだねぇ
+								boss.state = (rand() % 6 == 0) ? 5 : 6;//ここで	ランダムに攻撃を決めてるんだねぇ
 								if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
 								else { boss.timer = 25; }
 							}
@@ -1289,6 +1291,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
 							break;
 						case 6:
+							PrintfCenter(640, 200, "REVERSE ATTACK!!");
 							// 画面反転攻撃
 							if (!isReverseAttackUsed) {
 								isScreenReversex = !isScreenReversex;
@@ -2519,6 +2522,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
 				Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
 			}
+	/*		float eyeXp = (player.dir == 1)
+				? player.x + 20.0f
+				: player.x + 4.0f;
+
+			Rect(
+				ReverseX(eyeXp, 8.0f),
+				ReverseY(player.y + 10.0f, 8.0f),
+				8.0f,
+				8.0f,
+				0xFFFFFFFF
+			);
+*/
+
+
+
 
 			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
 				float sx, sy, sw, sh;
