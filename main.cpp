@@ -172,13 +172,34 @@ enum Scene { kTitle, kStageSelect, kPlay, kGameOver, kVictory };
 // ==================================================
 static int gShakeX = 0;
 static int gShakeY = 0;
+//画面反転用の関数
 
-static void Rect(float x, float y, float w, float h, unsigned int color) {
-	Novice::DrawBox(static_cast<int>(x) + gShakeX, static_cast<int>(y) + gShakeY, static_cast<int>(w), static_cast<int>(h), 0.0f, color, kFillModeSolid);
+bool isScreenReversex = false;
+bool isScreenReversey = false;
+bool isReverseAttackUsed = false;
+
+float ReverseX(float x, float w = 0.0f) {
+	if (isScreenReversex) {
+		return kScreenW - x - w;
+	}
+	return x;
 }
 
+float ReverseY(float y, float h = 0.0f) {
+	if (isScreenReversey) {
+		return kScreenH - y - h;
+	}
+	return y;
+}
+static void Rect(float x, float y, float w, float h, unsigned int color) {
+	float rx = ReverseX(x, w);
+	float ry = ReverseY(y, h);
+	Novice::DrawBox(static_cast<int>(rx) + gShakeX, static_cast<int>(ry) + gShakeY, static_cast<int>(w), static_cast<int>(h), 0.0f, color, kFillModeSolid);
+}
 static void Circle(float x, float y, float r, unsigned int color) {
-	Novice::DrawEllipse(static_cast<int>(x) + gShakeX, static_cast<int>(y) + gShakeY, static_cast<int>(r), static_cast<int>(r), 0.0f, color, kFillModeSolid);
+	float rx = ReverseX(x, 0.0f);
+	float ry = ReverseY(y, 0.0f);
+	Novice::DrawEllipse(static_cast<int>(rx) + gShakeX, static_cast<int>(ry) + gShakeY, static_cast<int>(r), static_cast<int>(r), 0.0f, color, kFillModeSolid);
 }
 
 static void PrintfCenter(int centerX, int y, const char* format, ...) {
@@ -189,25 +210,25 @@ static void PrintfCenter(int centerX, int y, const char* format, ...) {
 	va_end(args);
 	GetFont().Draw(centerX - GetFont().Width(buf) / 2, y, buf);
 }
-//ステージ２ 画面反転用の関数
-bool isScreenReversex = false;
-bool isScreenReversey = false;
-bool isReverseAttackUsed = false;
-///ステージ２　反転させるためのあれ
-		// X座標を反転
-float ReverseX(float x, float w = 0.0f) {
-	if (isScreenReversex) {
-		return kScreenW - x - w;
-	}
-	return x;
-}
-// Y座標を反転
-float ReverseY(float y, float h = 0.0f) {
-	if (isScreenReversey) {
-		return kScreenH - y - h;
-	}
-	return y;
-}
+////ステージ２ 画面反転用の関数
+//bool isScreenReversex = false;
+//bool isScreenReversey = false;
+//bool isReverseAttackUsed = false;
+/////ステージ２　反転させるためのあれ
+//		// X座標を反転
+//float ReverseX(float x, float w = 0.0f) {
+//	if (isScreenReversex) {
+//		return kScreenW - x - w;
+//	}
+//	return x;
+//}
+//// Y座標を反転
+//float ReverseY(float y, float h = 0.0f) {
+//	if (isScreenReversey) {
+//		return kScreenH - y - h;
+//	}
+//	return y;
+//}
 
 // ==================================================
 // 共通関数
@@ -2148,6 +2169,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				shake = 0;
 				gShakeX = 0;
 				gShakeY = 0;
+				isScreenReversex = false;
+				isScreenReversey = false;
+				isReverseAttackUsed = false;
 				scene = kVictory;
 			}
 			else if (player.hp <= 0) {
@@ -2155,6 +2179,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				shake = 0;
 				gShakeX = 0;
 				gShakeY = 0;
+				isScreenReversex = false;
+				isScreenReversey = false;
+				isReverseAttackUsed = false;
 				scene = kGameOver;
 			}
 		}
