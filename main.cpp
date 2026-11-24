@@ -679,7 +679,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//=================================================
 	// 効果音
 	// =================================================
+
+	//=================================================
+	//プレイヤーの効果音
+	//=================================================
+	//ブレイクしていないときの通常攻撃の効果音
+	int lightSound = Novice::LoadAudio("./Resources/sound/lightSound.MP3");
+	//ブレイクしているときの通常攻撃の効果音
+	int heavySound = Novice::LoadAudio("./Resources/sound/heavySound.MP3");
+	//パリィした時の効果音
+	int parrySound = Novice::LoadAudio("./Resources/sound/parrySound.MP3");
+
+	int lightHandle = -1;
+	int heavyHandle = -1;
+	int parryHandle = -1;
+	//=================================================
 	//ステージ１の効果音
+	//=================================================
 	int jesseToTakeastnceSound = Novice::LoadAudio("./Resources/sound/Totakeastance.MP3");
 	int jesseshotSound = Novice::LoadAudio("./Resources/sound/shot.MP3");
 	//ブレイクの効果音
@@ -690,6 +706,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jesseMeteorSound = Novice::LoadAudio("./Resources/sound/meteor.MP3");
 	//チャージ中の効果音
 	int jesseChargeSound = Novice::LoadAudio("./Resources/sound/meteorCharge.MP3");
+	//コウモリの効果音
+	int batSound = Novice::LoadAudio("./Resources/sound/bat.MP3");
+	//パリィされた攻撃に当たった時の効果音
+	int parryHitSound = Novice::LoadAudio("./Resources/sound/parryHit.MP3");
 
 	int jesseToTakeastnceHandle = -1;
 	int jesseshotHandle = -1;
@@ -697,6 +717,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jesseBlowoffHandle = -1;
 	int jesseMeteorHandle = -1;
 	int jesseChargeHandle = -1;
+	int batHandle = -1;
+	int parryHitHandle = -1;
 
 	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
@@ -1025,14 +1047,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					if (boss.isBroken)
 					{
 						dmg = static_cast<int>(player.atkDmg * 1.5f);
+						//ブレイク中の攻撃ヒット音
+						heavyHandle = Novice::PlayAudio(heavySound, false, 0.7f);
 					}
 					else if (boss.type == 0)
 					{
-						// 全く入らない（0）にしたい場合は dmg = 0; にする
+						//全く入らない（0）にしたい場合は dmg = 0; にする
 						dmg = player.atkDmg / 10;
+						//ブレイクしていない時の攻撃ヒット音（弾かれる音）
+						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
 					}
 					else if (boss.type == 2) {
 						dmg = player.atkDmg / 3;
+						//ステージ3でブレイクしていない時も鳴らす場合
+						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
+					}
+					else {
+						//ステージ2でブレイクしていない時の音
+						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
 					}
 					boss.hp -= dmg;
 					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
@@ -1050,7 +1082,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
 							player.vy = -12.0f;
 							player.onGround = false;
-							player.invincible = 30;//短い無敵
+							player.invincible = 45;//短い無敵
 							shake = 16;// 画面を揺らす
 							// 吹き飛ばしエフェクト
 							boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
@@ -1069,7 +1101,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					if (player.invincible < 15) player.invincible = 15;
 
 					//ブレイク中ノックバックしない
-					if (boss.type != 2 && !(boss.type == 0 && boss.isBroken)) 
+					if (boss.type != 2 && !(boss.type == 0 && boss.isBroken))
 					{
 						float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
 						boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
@@ -1914,9 +1946,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				// 登場演出用コウモリの移動更新（introTimerが0になった後も画面外へ出るまで飛び続ける）
 				if (currentStage == 0 && introTimer < 80)
 				{
+					bool anyBatActive = false; //1匹でも飛んでいるかのフラグ
 					for (int i = 0; i < kMaxIntroBats; i++)
 					{
 						if (!introBats[i].active) continue;
+						anyBatActive = true; //まだ飛んでいるコウモリがいる
 						introBats[i].x += introBats[i].vx;
 						introBats[i].y += introBats[i].vy;
 						// 画面外に出たら消す（下方向も念のため追加）
@@ -1924,6 +1958,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							introBats[i].y < -64.0f || introBats[i].y > kScreenH + 64.0f)
 						{
 							introBats[i].active = false;
+						}
+					}
+					// コウモリが飛んでいる間だけ音をループ再生（多重再生防止）
+					if (anyBatActive) {
+						if (!Novice::IsPlayingAudio(batHandle)) {
+							batHandle = Novice::PlayAudio(batSound, true, 2.0f); // 第2引数をtrueにしてループ
+						}
+					}
+					else {
+						// 全てのコウモリが画面外に出たら音を止める
+						if (Novice::IsPlayingAudio(batHandle)) {
+							Novice::StopAudio(batHandle);
 						}
 					}
 					//吹き飛ばしエフェクトのタイマーを減らす
@@ -2015,12 +2061,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								b.active = false;
 								bool wasBroken = boss.isBroken;
 								DamageBossBreak(boss, 150, shake);
-
+								// ステージ1のエネミーにパリィ弾が当たった時の効果音
+								if (boss.type == 0)
+								{
+									parryHitHandle = Novice::PlayAudio(parryHitSound, false, 1.0f);
+								}
 								//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
-								if (!wasBroken && boss.isBroken && boss.type == 0) {
-									jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 0.8f);
+								if (!wasBroken && boss.isBroken && boss.type == 0)
+								{
+									jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 1.0f);
 									// もしチャージ中だったらチャージ音も止める
-									if (Novice::IsPlayingAudio(jesseChargeHandle)) {
+									if (Novice::IsPlayingAudio(jesseChargeHandle))
+									{
 										Novice::StopAudio(jesseChargeHandle);
 									}
 								}
@@ -2046,6 +2098,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							player.parryCooldown = 0;
 							player.invincible = 20;
 							player.parryFlash = 10;
+							// パリィした時のサウンド!!!!!!!!!!!!!!!!!!!
+							parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
 							shake = 6;
 						}
 						else if (player.invincible == 0 && player.dashTimer == 0 &&
@@ -2072,6 +2126,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						player.invincible = 30;
 						player.parryCooldown = 0;
 						player.parryFlash = 10;
+						// ボス本体にパリィした時のサウンド!!!!!!!!!!!!!!!!!!!
+						parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
 						player.vy = -9.0f;
 						player.onGround = false;
 						shake = 10;
