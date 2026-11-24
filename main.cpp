@@ -1237,6 +1237,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								{
 									Novice::StopAudio(jesseChargeHandle);
 								}
+								// メテオの音を再生
+								jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 1.5f);
 							}
 							// メテオ降下中は少し移動
 							if (boss.timer <= 40) {
@@ -1249,8 +1251,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								float meteorVx = (targetX - startX) / 55.0f;
 								// 今回のメテオ攻撃がレアなら全部レアメテオになる
 								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
-								// メテオの音を再生
-								jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 0.7f);
 							}
 							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
 							break;
