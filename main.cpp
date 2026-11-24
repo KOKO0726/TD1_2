@@ -137,6 +137,9 @@ struct Boss {
 	float repelEffectX, repelEffectY; //エフェクトの発生位置
 	float aimAngle;        //照準レーザーの角度
 	int muzzleFlashTimer;  //発射時の光の輪の残り時間
+	//撃破アニメーション用
+	bool isDying;          // やられ演出中か
+	int dieTimer;          // やられ演出の経過フレーム
 
 	// ---- ステージ3専用AI変数 ----
 	bool hidden;            // 画面から消えているか
@@ -551,6 +554,8 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.repelEffectY = 0.0f;
 	boss.aimAngle = 0.0f;
 	boss.muzzleFlashTimer = 0;
+	boss.isDying = false;
+	boss.dieTimer = 0;   
 	if (stage == 2) {
 		RefillStage3Patterns(boss);
 	}
@@ -683,6 +688,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//吹き飛ばしのテクスチャ
 	int jesseblowoffLeftTexture = Novice::LoadTexture("./Resources/images/jesseblowoffLeft.png");
 	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
+	//やられた時のテクスチャ
+	int jessegottakendownLeftTexture = Novice::LoadTexture("./Resources/images/jessegottakendownLeft.png");
+	int jessegottakendownRightTexture = Novice::LoadTexture("./Resources/images/jessegottakendownRight.png");
 	//足場のテクスチャ
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
 	//背景のテクスチャ
@@ -943,7 +951,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					player.parryCooldown = 45;
 				}
 
-				if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0) {
+				if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0 && !boss.isDying) {
 					int adir = player.dir;
 					if (keys[DIK_A]) {
 						adir = -1;
@@ -1057,7 +1065,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float ax, ay, aw, ah;
 				MeleeBox(player, &ax, &ay, &aw, &ah);
 
-				if (introTimer == 0 && !boss.hidden && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
+				if (introTimer == 0 && !boss.hidden && !boss.isDying && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 					bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
 					player.atkHit = true;
 					//==========================================
@@ -1155,7 +1163,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				float pcy = player.y + player.h * 0.5f;
 				float aim = atan2f(pcy - bcy, pcx - bcx);
 
-				if (boss.isBroken) {
+				if (boss.isDying) {
+					Novice::StopAudio(jesseBgmHandle);
+					boss.dieTimer++;
+					// もし空中でトドメを刺した場合は地面まで落とす
+					if (boss.y + boss.h < groundY) {
+						boss.vy += kGravity;
+						boss.y += boss.vy;
+						if (boss.y + boss.h >= groundY) {
+							boss.y = groundY - boss.h;
+							boss.vy = 0.0f;
+						}
+					}
+					// 倒した後のアニメーション再生時間
+					if (boss.dieTimer >= 120) {
+						if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
+							bestFrames[currentStage] = playFrames;
+						}
+						shake = 0;
+						gShakeX = 0;
+						gShakeY = 0;
+						isScreenReversex = false;
+						isScreenReversey = false;
+						isReverseAttackUsed = false;
+						scene = kVictory;
+					}
+				}
+				else if (boss.isBroken) {
 					boss.breakTimer--;
 					boss.hidden = false;
 					boss.timeStopTimer = 0;
@@ -2163,16 +2197,36 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				boss.hp = 0;
 				for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
 				for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
-				if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
-					bestFrames[currentStage] = playFrames;
+
+				// ステージ1ならやられ演出を開始（ステージ2・3は今まで通り即クリア）
+				if (boss.type == 0) {
+					if (!boss.isDying) {
+						boss.isDying = true;
+						boss.dieTimer = 0;
+						boss.isBroken = false;
+						boss.repelEffectTimer = 0;
+						// トドメを刺された瞬間のプレイヤーがいる方向を向かせる
+						boss.dir = ((player.x + player.w * 0.5f) > (boss.x + boss.w * 0.5f)) ? 1 : -1;
+						CancelAttack(player); //プレイヤーの攻撃状態をリセット
+						shake = 20;
+						// チャージ音やBGMを止める場合
+						if (Novice::IsPlayingAudio(jesseChargeHandle)) {
+							Novice::StopAudio(jesseChargeHandle);
+						}
+					}
 				}
-				shake = 0;
-				gShakeX = 0;
-				gShakeY = 0;
-				isScreenReversex = false;
-				isScreenReversey = false;
-				isReverseAttackUsed = false;
-				scene = kVictory;
+				else {
+					if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
+						bestFrames[currentStage] = playFrames;
+					}
+					shake = 0;
+					gShakeX = 0;
+					gShakeY = 0;
+					isScreenReversex = false;
+					isScreenReversey = false;
+					isReverseAttackUsed = false;
+					scene = kVictory;
+				}
 			}
 			else if (player.hp <= 0) {
 				player.hp = 0;
@@ -2324,9 +2378,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			{
 				if (boss.type == 0)
 				{
-					// 状態（ブレイク中、チャージ中、歩行中、それ以外）と向きに応じて描画するテクスチャを切り替え
 					int currentTex = 0;
-					if (boss.isBroken)
+					int frameW = kJesseFrameWidth; // 通常は 64
+					int drawFrame = jesseAnimFrame;
+
+					if (boss.isDying) {
+						// やられモーション（1コマ 96x96）
+						currentTex = (boss.dir == 1) ? jessegottakendownLeftTexture : jessegottakendownRightTexture;
+						frameW = 96;
+						// 10フレームごとにコマを進め、3（4枚目）で止める
+						drawFrame = boss.dieTimer / 10;
+						if (drawFrame >= kJesseFrameCount) {
+							drawFrame = kJesseFrameCount - 1; // 3番目（4枚目）で固定
+						}
+					}
+					else if (boss.isBroken)
 					{
 						// ブレイク中
 						currentTex = (boss.dir == 1) ? jesseBreakRightTexture : jesseBreakLeftTexture;
@@ -2365,8 +2431,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					float scaleY = drawH / boss.h;
 
 					// 描画するアニメーションコマ番号の決定
-					int drawFrame = jesseAnimFrame;
-					if (!boss.isBroken && boss.state == 3) {
+					if (!boss.isDying && !boss.isBroken && boss.state == 3) {
 						if (boss.timer > 40) {
 							// メテオが降るまでは1枚目（0番目）をキープ
 							drawFrame = 0;
@@ -2376,13 +2441,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							drawFrame = 1 + (jesseAnimFrame % 3);
 						}
 					}
-
 					Novice::DrawSpriteRect(
-						static_cast<int>(boss.x + (boss.w - kJesseFrameWidth) * 0.5f) + gShakeX,
+						static_cast<int>(boss.x + (boss.w - frameW) * 0.5f) + gShakeX,
 						static_cast<int>(drawY) + gShakeY,
-						drawFrame * kJesseFrameWidth,
+						drawFrame * frameW,
 						0,
-						kJesseFrameWidth,
+						frameW,
 						kJesseFrameHeight,
 						currentTex,
 						1.0f / static_cast<float>(kJesseFrameCount),
