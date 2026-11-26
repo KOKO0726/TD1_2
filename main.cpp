@@ -674,6 +674,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
 	int jessegottakendownLeftTexture = Novice::LoadTexture("./Resources/images/jessegottakendownLeft.png");
 	int jessegottakendownRightTexture = Novice::LoadTexture("./Resources/images/jessegottakendownRight.png");
+	int jesseshadowTexture = Novice::LoadTexture("./Resources/images/jesseshadow.png");
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
 	int backGroundTexture = Novice::LoadTexture("./Resources/images/background.png");
 	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
@@ -2153,6 +2154,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//==================================================
 		//描画処理
 		//==================================================
+
+		// シェイクの時のために画面全体を暗くする背景
+		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
+
 		if (shake > 0) {
 			gShakeX = (rand() % 11) - 5;
 			gShakeY = (rand() % 11) - 5;
@@ -2161,9 +2166,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			gShakeX = gShakeY = 0;
 		}
 
-		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
+		// セレクト画面中は選択中のステージを描画
+		int displayStage = (scene == kStageSelect) ? selectedStage : currentStage;
+		int displayPlatformNum = (displayStage == 2) ? 1 : kPlatformNum;
 
-		if ((scene == kPlay || scene == kGameOver || scene == kVictory) && currentStage == 0) {
+		if (scene != kTitle && displayStage == 0) {
+			// ステージ1の背景
 			Novice::DrawSprite(
 				gShakeX,
 				gShakeY,
@@ -2174,14 +2182,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				0xFFFFFFFF
 			);
 		}
+		else if (scene != kTitle && displayStage == 1) {
+			// ステージ2の背景
+			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x3B1B1BFF, kFillModeSolid);
+		}
+		else if (scene != kTitle && displayStage == 2) {
+			// ステージ3の背景
+			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x2B1B3BFF, kFillModeSolid);
+		}
 		else {
+			// タイトル画面などのデフォルト背景
 			Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 		}
 
-		for (int i = 0; i < activePlatformNum; i++) {
+		for (int i = 0; i < displayPlatformNum; i++) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
 
-			if (currentStage == 0 && i == 0) {
+			if (displayStage == 0 && i == 0) {
 				Novice::DrawSprite(
 					static_cast<int>(platforms[i].x) + gShakeX,
 					static_cast<int>(platforms[i].y) + gShakeY,
@@ -2192,7 +2209,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					0xFFFFFFFF
 				);
 			}
-			else if (currentStage == 0 && i > 0) {
+			else if (displayStage == 0 && i > 0) {
 				Novice::DrawSprite(
 					static_cast<int>(platforms[i].x) + gShakeX,
 					static_cast<int>(platforms[i].y) + gShakeY,
@@ -2669,26 +2686,59 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		else if (scene == kStageSelect) {
-			PrintfCenter(640, 80, "=== STAGE SELECT ===");
+			PrintfCenter(640, 70, "=== STAGE SELECT ===");
 			const char* stageNames[kTotalStages] = { "STAGE 1", "STAGE 2", "STAGE 3" };
 			const char* bossTypes[kTotalStages] = { "Jesse", "Crusher Type", "Wizard Type" };
-			const int boxW = 180;
-			const int boxH = 210;
-			const int boxGap = 20;
+			const int boxW = 300;
+			const int boxH = 340;
+			const int boxGap = 50;
 			const int boxStartX = (kScreenW - (boxW * kTotalStages + boxGap * (kTotalStages - 1))) / 2;
-			const int boxY = 220;
+			const int boxY = 180;
 
 			for (int i = 0; i < kTotalStages; i++) {
 				bool isSelected = (i == selectedStage);
-				unsigned int boxColor = isSelected ? 0x336699FF : 0x222233FF;
+				unsigned int boxColor = isSelected ? 0x336699DD : 0x222233BB;
 				unsigned int frameColor = isSelected ? 0xFFFFFFFF : 0x888888FF;
 				int boxX = boxStartX + i * (boxW + boxGap);
 				int centerX = boxX + boxW / 2;
+
+				// 四角のベースを描画
 				Novice::DrawBox(boxX, boxY, boxW, boxH, 0.0f, boxColor, kFillModeSolid);
+
+				// 四角の中にキャラクター画像を透けさせて描画
+				unsigned int shadowColor = isSelected ? 0xFFFFFF99 : 0xFFFFFF44;
+				if (i == 0) {
+					// ステージ1のキャラを四角の中央付近に描画
+					float scale = 2.0f; // 例：64x96 の画像なら 128x192 になる
+					int imgW = static_cast<int>(64 * scale);
+					int imgH = static_cast<int>(96 * scale);
+					int drawX = centerX - imgW / 2;
+					int drawY = boxY + (boxH - imgH) / 2 + 10;
+
+					Novice::DrawSprite(
+						drawX,
+						drawY,
+						jesseshadowTexture,
+						scale,
+						scale,
+						0.0f,
+						shadowColor
+					);
+				}
+				else if (i == 1) {
+					// ステージ2用のシルエット画像
+					// Novice::DrawSprite(...);
+				}
+				else if (i == 2) {
+					// ステージ3用のシルエット画像
+					// Novice::DrawSprite(...);
+				}
+
+				// 3. 枠線と文字を上から描画
 				Novice::DrawBox(boxX, boxY, boxW, boxH, 0.0f, frameColor, kFillModeWireFrame);
-				PrintfCenter(centerX, boxY + 25, "%s", stageNames[i]);
-				PrintfCenter(centerX, boxY + 65, "%s", bossTypes[i]);
-				if (isSelected) PrintfCenter(centerX, boxY + 160, "^^ SELECT");
+				PrintfCenter(centerX, boxY + 45, "%s", stageNames[i]);
+				PrintfCenter(centerX, boxY + 130, "%s", bossTypes[i]);
+				if (isSelected) PrintfCenter(centerX, boxY + 270, "^^ SELECT");
 			}
 		}
 		else if (scene == kGameOver) {
