@@ -555,7 +555,7 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.aimAngle = 0.0f;
 	boss.muzzleFlashTimer = 0;
 	boss.isDying = false;
-	boss.dieTimer = 0;   
+	boss.dieTimer = 0;
 	if (stage == 2) {
 		RefillStage3Patterns(boss);
 	}
@@ -739,6 +739,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int batSound = Novice::LoadAudio("./Resources/sound/bat.MP3");
 	//パリィされた攻撃に当たった時の効果音
 	int parryHitSound = Novice::LoadAudio("./Resources/sound/parryHit.MP3");
+	//撃墜の効果音
+	int jesseShootDownSound = Novice::LoadAudio("./Resources/sound/jesseShootDown.MP3");
+	//倒したアニメーションの効果音
+	int jesseDownSound = Novice::LoadAudio("./Resources/sound/jesseDown.MP3");
 
 	int jesseToTakeastnceHandle = -1;
 	int jesseshotHandle = -1;
@@ -748,6 +752,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jesseChargeHandle = -1;
 	int batHandle = -1;
 	int parryHitHandle = -1;
+	int jesseShootDownHandle = -1;
+	int jesseDownHandle = -1;
 
 	//ステージ１のエネミーのアニメーション用変数
 	const int kJesseFrameWidth = 64;
@@ -789,6 +795,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Scene scene = kTitle;
 	int introTimer = 0;
 	int shake = 0;
+	int hitStopTimer = 0;
 	int playFrames = 0;
 	int frame = 0;
 
@@ -838,6 +845,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 				playFrames = 0;
 				shake = 0;
+				hitStopTimer = 0;
 				gShakeX = 0;
 				gShakeY = 0;
 				scene = kPlay;
@@ -862,321 +870,1378 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		else if (scene == kPlay) {
-			bool isTimeStopped = (boss.type == 2 && boss.timeStopTimer > 0);
-
-			if (!isTimeStopped) {
-				player.vx = 0.0f;
-				if (keys[DIK_A]) {
-					player.vx = -kMoveSpeed;
-					player.dir = -1;
-					if (isScreenReversex)
-					{
-						player.vx = kMoveSpeed;
-						player.dir = 1;
-					}
-				}
-				if (keys[DIK_D]) {
-					player.vx = kMoveSpeed;
-					player.dir = 1;
-					if (isScreenReversex)
-					{
-						player.vx = -kMoveSpeed;
-						player.dir = -1;
-					}
-				}
-
-				/*		bool isrevarscontlol = (boss.type == 1);
-						if (isReverseAttackUsed= true)
-						{
-							if (keys[DIK_A]) {
-								player.vx = kMoveSpeed;
-								player.dir = 1;
-							}
-							if (keys[DIK_D]) {
-								player.vx = -kMoveSpeed;
-								player.dir = -1;
-							}
-
-
-						}*/
-
-
-
-						//=====================///
-						///プレイヤー操作（共通)///
-						//=====================///
-
-				bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
-				bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
-
-				if (player.dashCooldown > 0) player.dashCooldown--;
-				if (player.parryCooldown > 0) player.parryCooldown--;
-				if (player.parryTimer > 0) player.parryTimer--;
-				if (player.parryFlash > 0) player.parryFlash--;
-
-				if (jumpTrigger && player.dashTimer == 0) {
-					if (player.onGround) {
-						CancelAttack(player);
-						player.vy = kJumpPower;
-						player.onGround = false;
-						player.jumpCount = 1;
-					}
-					else if (player.jumpCount < 2) {
-						CancelAttack(player);
-						player.vy = kJumpPower * 0.9f;
-						player.jumpCount = 2;
-					}
-				}
-
-				if (!player.onGround && player.vy < 0.0f && !jumpHeld) {
-					player.vy += 1.2f;
-				}
-
-				bool dashTrigger = (preKeys[DIK_LSHIFT] == 0 && keys[DIK_LSHIFT] != 0);
-				if (dashTrigger && player.dashTimer == 0 && player.dashCooldown == 0 && player.parryTimer == 0 && (player.onGround || player.airDashLeft > 0)) {
-					CancelAttack(player);
-					player.dashTimer = 10;
-					player.dashCooldown = 35;
-					int d = player.dir;
-					if (keys[DIK_A]) d = -1;
-					if (keys[DIK_D]) d = 1;
-					player.dashDir = d;
-					player.dir = d;
-					if (!player.onGround) player.airDashLeft--;
-				}
-
-				if (Novice::IsTriggerMouse(1) && player.parryCooldown == 0 && player.dashTimer == 0) {
-					CancelAttack(player);
-					player.parryTimer = 12;
-					player.parryCooldown = 45;
-				}
-
-				if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0 && !boss.isDying) {
-					int adir = player.dir;
-					if (keys[DIK_A]) {
-						adir = -1;
-					}
-					else if (keys[DIK_D]) {
-						adir = 1;
-					}
-					else {
-						adir = (boss.x + boss.w * 0.5f > player.x + player.w * 0.5f) ? 1 : -1;
-					}
-
-					bool canNext = player.atkHit && player.atkStep > 0 &&
-						((!player.atkAir && player.atkStep < 8) || (player.atkAir && player.atkStep < 4)) &&
-						(player.atkTimer <= 6 || player.comboWindow > 0);
-
-					if (canNext) {
-						StartAttack(player, player.atkAir, player.atkStep + 1, adir);
-					}
-					else if (player.atkTimer == 0 && player.comboWindow == 0) {
-						if (player.onGround) {
-							StartAttack(player, false, 1, adir);
-						}
-						else if (player.airComboLeft > 0) {
-							player.airComboLeft--;
-							StartAttack(player, true, 1, adir);
-						}
-					}
-				}
-
-				if (player.atkTimer > 0) {
-					player.atkTimer--;
-					if (player.atkTimer == 0) {
-						if (player.atkAir && player.atkHit && player.atkStep < 4) {
-							player.comboWindow = 22;
-						}
-						else if (!player.atkAir && player.atkHit && player.atkStep < 8) {
-							player.comboWindow = 22;
-						}
-						else {
-							player.atkStep = 0;
-						}
-					}
-				}
-				else if (player.comboWindow > 0) {
-					player.comboWindow--;
-					if (player.comboWindow == 0) player.atkStep = 0;
-				}
-
-				bool hover = false;
-				if (player.atkTimer > 0) {
-					if (!player.atkAir) {
-						player.vx = 0.0f;
-					}
-					else {
-						player.vx *= 0.4f;
-						hover = true;
-					}
-				}
-				else if (player.comboWindow > 0) {
-					player.vx *= 0.4f;
-					hover = true;
-				}
-
-				bool dashing = player.dashTimer > 0;
-				if (player.knockbackTimer > 0) {
-					// 吹き飛ばされ中の処理
-					player.vx = player.knockbackVx;
-					player.knockbackVx *= 0.92f; // 徐々に減速
-					player.knockbackTimer--;
-				}
-				else if (dashing) {
-					player.vx = player.dashDir * 18.0f;
-					player.vy = 0.0f;
-					player.dashTimer--;
-				}
-				else if (hover) {
-					player.vy = 0.0f;
-				}
-				player.x += player.vx;
-				player.x = Clamp(player.x, 0.0f, kScreenW - player.w);
-
-				float prevBottom = player.y + player.h;
-				if (!dashing && !hover) player.vy += kGravity;
-				if (player.vy > kMaxFall) player.vy = kMaxFall;
-				player.y += player.vy;
-				player.onGround = false;
-
-				float landY;
-				if (player.vy >= 0.0f && LandOnPlatform(platforms, activePlatformNum, player.x, player.w, prevBottom, player.y + player.h, &landY)) {
-					player.y = landY - player.h;
-					player.vy = 0.0f;
-					player.onGround = true;
-					player.jumpCount = 0;
-					player.airDashLeft = 1;
-					player.airComboLeft = 1;
-					if (player.atkAir) CancelAttack(player);
-				}
-				if (!player.onGround && player.jumpCount == 0) player.jumpCount = 1;
-
-				if (player.invincible > 0) player.invincible--;
-			}
-
-			if (boss.flash > 0) boss.flash--;
-			if (shake > 0) shake--;
-			if (!isTimeStopped) playFrames++;
-			for (int i = 0; i < kMaxDamagePopups; i++) {
-				if (popups[i].timer > 0) popups[i].timer--;
-			}
-
-			if (!isTimeStopped && player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
-				float ax, ay, aw, ah;
-				MeleeBox(player, &ax, &ay, &aw, &ah);
-
-				if (introTimer == 0 && !boss.hidden && !boss.isDying && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
-					bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
-					player.atkHit = true;
-					//==========================================
-					// ブレイク処理
-					// =========================================
-					// ステージ1でブレイクしていない時はダメージがほとんど通らない
-					int dmg = player.atkDmg;
-					if (boss.isBroken)
-					{
-						dmg = static_cast<int>(player.atkDmg * 1.5f);
-						//ブレイク中の攻撃ヒット音
-						heavyHandle = Novice::PlayAudio(heavySound, false, 0.7f);
-					}
-					else if (boss.type == 0)
-					{
-						//全く入らない（0）にしたい場合は dmg = 0; にする
-						dmg = player.atkDmg / 10;
-						//ブレイクしていない時の攻撃ヒット音（弾かれる音）
-						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
-					}
-					else if (boss.type == 2) {
-						dmg = player.atkDmg / 3;
-						//ステージ3でブレイクしていない時も鳴らす場合
-						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
-					}
-					else {
-						//ステージ2でブレイクしていない時の音
-						lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
-					}
-					boss.hp -= dmg;
-					SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
-
-					// ステージ1でブレイク中でなければヒット数をカウント
-					if (boss.type == 0 && !boss.isBroken) {
-						boss.hitCount++;
-						if (boss.hitCount >= 10) {
-							boss.hitCount = 0; // カウントリセット
-							CancelAttack(player); //プレイヤーの攻撃を中断
-
-							// ボスから離れる方向を計算して吹き飛ばす
-							float pushDir = (player.x + player.w * 0.5f < boss.x + boss.w * 0.5f) ? -1.0f : 1.0f;
-							player.knockbackTimer = 25;
-							player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
-							player.vy = -12.0f;
-							player.onGround = false;
-							player.invincible = 45;//短い無敵
-							shake = 16;// 画面を揺らす
-							// 吹き飛ばしエフェクト
-							boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
-							boss.repelEffectX = boss.x + boss.w * 0.5f; // ボスの中心から
-							boss.repelEffectY = boss.y + boss.h * 0.5f;
-							// 吹き飛ばしアニメーションを最初のコマから再生
-							jesseAnimFrame = 0;
-							jesseAnimTimer = 0;
-							// 吹き飛ばしの音を再生
-							jesseBlowoffHandle = Novice::PlayAudio(jesseBlowoffSound, false, 0.7f);
-						}
-					}
-
-					boss.flash = 6;
-					shake = finisher ? 16 : 6;
-					if (player.invincible < 15) player.invincible = 15;
-
-					//ブレイク中ノックバックしない
-					if (boss.type != 2 && !(boss.type == 0 && boss.isBroken))
-					{
-						float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
-						boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
-					}
-				}
-
-				for (int i = 0; i < kMaxEBullets; i++) {
-					EBullet& eb = ebullets[i];
-					if (!eb.active || eb.wave || eb.reflected || eb.unparryable) continue;
-					if (HitBox(ax, ay, aw, ah, eb.x - eb.r, eb.y - eb.r, eb.r * 2.0f, eb.r * 2.0f)) {
-						eb.active = false;
-					}
-				}
-			}
-			if (introTimer > 0)
+			// ヒットストップ中はゲームの進行を止める
+			if (hitStopTimer > 0)
 			{
-				introTimer--;
-				// コウモリが飛び始めた瞬間にBGMをループ再生
-				if (currentStage == 0 && introTimer == 80) {
-					if (!Novice::IsPlayingAudio(jesseBgmHandle)) {
-						jesseBgmHandle = Novice::PlayAudio(jesseBgmSound, true, 0.5f);
-					}
-				}
+				hitStopTimer--;
 			}
 			else
 			{
-				float bcx = boss.x + boss.w * 0.5f;
-				float bcy = boss.y + boss.h * 0.5f;
-				float pcx = player.x + player.w * 0.5f;
-				float pcy = player.y + player.h * 0.5f;
-				float aim = atan2f(pcy - bcy, pcx - bcx);
+				bool isTimeStopped = (boss.type == 2 && boss.timeStopTimer > 0);
 
-				if (boss.isDying) {
-					Novice::StopAudio(jesseBgmHandle);
-					boss.dieTimer++;
-					// もし空中でトドメを刺した場合は地面まで落とす
-					if (boss.y + boss.h < groundY) {
-						boss.vy += kGravity;
-						boss.y += boss.vy;
-						if (boss.y + boss.h >= groundY) {
-							boss.y = groundY - boss.h;
-							boss.vy = 0.0f;
+				if (!isTimeStopped)
+				{
+					player.vx = 0.0f;
+					if (keys[DIK_A])
+					{
+						player.vx = -kMoveSpeed;
+						player.dir = -1;
+						if (isScreenReversex)
+						{
+							player.vx = kMoveSpeed;
+							player.dir = 1;
 						}
 					}
-					// 倒した後のアニメーション再生時間
-					if (boss.dieTimer >= 120) {
+					if (keys[DIK_D])
+					{
+						player.vx = kMoveSpeed;
+						player.dir = 1;
+						if (isScreenReversex)
+						{
+							player.vx = -kMoveSpeed;
+							player.dir = -1;
+						}
+					}
+
+					/*		bool isrevarscontlol = (boss.type == 1);
+							if (isReverseAttackUsed= true)
+							{
+								if (keys[DIK_A]) {
+									player.vx = kMoveSpeed;
+									player.dir = 1;
+								}
+								if (keys[DIK_D]) {
+									player.vx = -kMoveSpeed;
+									player.dir = -1;
+								}
+
+
+							}*/
+
+
+
+							//=====================///
+							///プレイヤー操作（共通)///
+							//=====================///
+
+					bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
+					bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
+
+					if (player.dashCooldown > 0) player.dashCooldown--;
+					if (player.parryCooldown > 0) player.parryCooldown--;
+					if (player.parryTimer > 0) player.parryTimer--;
+					if (player.parryFlash > 0) player.parryFlash--;
+
+					if (jumpTrigger && player.dashTimer == 0) {
+						if (player.onGround) {
+							CancelAttack(player);
+							player.vy = kJumpPower;
+							player.onGround = false;
+							player.jumpCount = 1;
+						}
+						else if (player.jumpCount < 2) {
+							CancelAttack(player);
+							player.vy = kJumpPower * 0.9f;
+							player.jumpCount = 2;
+						}
+					}
+
+					if (!player.onGround && player.vy < 0.0f && !jumpHeld) {
+						player.vy += 1.2f;
+					}
+
+					bool dashTrigger = (preKeys[DIK_LSHIFT] == 0 && keys[DIK_LSHIFT] != 0);
+					if (dashTrigger && player.dashTimer == 0 && player.dashCooldown == 0 && player.parryTimer == 0 && (player.onGround || player.airDashLeft > 0)) {
+						CancelAttack(player);
+						player.dashTimer = 10;
+						player.dashCooldown = 35;
+						int d = player.dir;
+						if (keys[DIK_A]) d = -1;
+						if (keys[DIK_D]) d = 1;
+						player.dashDir = d;
+						player.dir = d;
+						if (!player.onGround) player.airDashLeft--;
+					}
+
+					if (Novice::IsTriggerMouse(1) && player.parryCooldown == 0 && player.dashTimer == 0) {
+						CancelAttack(player);
+						player.parryTimer = 12;
+						player.parryCooldown = 45;
+					}
+
+					if (Novice::IsTriggerMouse(0) && player.dashTimer == 0 && player.parryTimer == 0 && !boss.isDying) {
+						int adir = player.dir;
+						if (keys[DIK_A]) {
+							adir = -1;
+						}
+						else if (keys[DIK_D]) {
+							adir = 1;
+						}
+						else {
+							adir = (boss.x + boss.w * 0.5f > player.x + player.w * 0.5f) ? 1 : -1;
+						}
+
+						bool canNext = player.atkHit && player.atkStep > 0 &&
+							((!player.atkAir && player.atkStep < 8) || (player.atkAir && player.atkStep < 4)) &&
+							(player.atkTimer <= 6 || player.comboWindow > 0);
+
+						if (canNext) {
+							StartAttack(player, player.atkAir, player.atkStep + 1, adir);
+						}
+						else if (player.atkTimer == 0 && player.comboWindow == 0) {
+							if (player.onGround) {
+								StartAttack(player, false, 1, adir);
+							}
+							else if (player.airComboLeft > 0) {
+								player.airComboLeft--;
+								StartAttack(player, true, 1, adir);
+							}
+						}
+					}
+
+					if (player.atkTimer > 0) {
+						player.atkTimer--;
+						if (player.atkTimer == 0) {
+							if (player.atkAir && player.atkHit && player.atkStep < 4) {
+								player.comboWindow = 22;
+							}
+							else if (!player.atkAir && player.atkHit && player.atkStep < 8) {
+								player.comboWindow = 22;
+							}
+							else {
+								player.atkStep = 0;
+							}
+						}
+					}
+					else if (player.comboWindow > 0) {
+						player.comboWindow--;
+						if (player.comboWindow == 0) player.atkStep = 0;
+					}
+
+					bool hover = false;
+					if (player.atkTimer > 0) {
+						if (!player.atkAir) {
+							player.vx = 0.0f;
+						}
+						else {
+							player.vx *= 0.4f;
+							hover = true;
+						}
+					}
+					else if (player.comboWindow > 0) {
+						player.vx *= 0.4f;
+						hover = true;
+					}
+
+					bool dashing = player.dashTimer > 0;
+					if (player.knockbackTimer > 0) {
+						// 吹き飛ばされ中の処理
+						player.vx = player.knockbackVx;
+						player.knockbackVx *= 0.92f; // 徐々に減速
+						player.knockbackTimer--;
+					}
+					else if (dashing) {
+						player.vx = player.dashDir * 18.0f;
+						player.vy = 0.0f;
+						player.dashTimer--;
+					}
+					else if (hover) {
+						player.vy = 0.0f;
+					}
+					player.x += player.vx;
+					player.x = Clamp(player.x, 0.0f, kScreenW - player.w);
+
+					float prevBottom = player.y + player.h;
+					if (!dashing && !hover) player.vy += kGravity;
+					if (player.vy > kMaxFall) player.vy = kMaxFall;
+					player.y += player.vy;
+					player.onGround = false;
+
+					float landY;
+					if (player.vy >= 0.0f && LandOnPlatform(platforms, activePlatformNum, player.x, player.w, prevBottom, player.y + player.h, &landY)) {
+						player.y = landY - player.h;
+						player.vy = 0.0f;
+						player.onGround = true;
+						player.jumpCount = 0;
+						player.airDashLeft = 1;
+						player.airComboLeft = 1;
+						if (player.atkAir) CancelAttack(player);
+					}
+					if (!player.onGround && player.jumpCount == 0) player.jumpCount = 1;
+
+					if (player.invincible > 0) player.invincible--;
+				}
+
+				if (boss.flash > 0) boss.flash--;
+				if (shake > 0) shake--;
+				if (!isTimeStopped) playFrames++;
+				for (int i = 0; i < kMaxDamagePopups; i++) {
+					if (popups[i].timer > 0) popups[i].timer--;
+				}
+
+				if (!isTimeStopped && player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
+					float ax, ay, aw, ah;
+					MeleeBox(player, &ax, &ay, &aw, &ah);
+
+					if (introTimer == 0 && !boss.hidden && !boss.isDying && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
+						bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
+						player.atkHit = true;
+						//==========================================
+						// ブレイク処理
+						// =========================================
+						// ステージ1でブレイクしていない時はダメージがほとんど通らない
+						int dmg = player.atkDmg;
+						if (boss.isBroken)
+						{
+							dmg = static_cast<int>(player.atkDmg * 1.5f);
+							//ブレイク中の攻撃ヒット音
+							heavyHandle = Novice::PlayAudio(heavySound, false, 0.7f);
+						}
+						else if (boss.type == 0)
+						{
+							//全く入らない（0）にしたい場合は dmg = 0; にする
+							dmg = player.atkDmg / 10;
+							//ブレイクしていない時の攻撃ヒット音（弾かれる音）
+							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
+						}
+						else if (boss.type == 2) {
+							dmg = player.atkDmg / 3;
+							//ステージ3でブレイクしていない時も鳴らす場合
+							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
+						}
+						else {
+							//ステージ2でブレイクしていない時の音
+							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
+						}
+						boss.hp -= dmg;
+						SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
+
+						// ステージ1でブレイク中でなければヒット数をカウント
+						if (boss.type == 0 && !boss.isBroken) {
+							boss.hitCount++;
+							if (boss.hitCount >= 10) {
+								boss.hitCount = 0; // カウントリセット
+								CancelAttack(player); //プレイヤーの攻撃を中断
+
+								// ボスから離れる方向を計算して吹き飛ばす
+								float pushDir = (player.x + player.w * 0.5f < boss.x + boss.w * 0.5f) ? -1.0f : 1.0f;
+								player.knockbackTimer = 25;
+								player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
+								player.vy = -12.0f;
+								player.onGround = false;
+								player.invincible = 45;//短い無敵
+								shake = 16;// 画面を揺らす
+								// 吹き飛ばしエフェクト
+								boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
+								boss.repelEffectX = boss.x + boss.w * 0.5f; // ボスの中心から
+								boss.repelEffectY = boss.y + boss.h * 0.5f;
+								// 吹き飛ばしアニメーションを最初のコマから再生
+								jesseAnimFrame = 0;
+								jesseAnimTimer = 0;
+								// 吹き飛ばしの音を再生
+								jesseBlowoffHandle = Novice::PlayAudio(jesseBlowoffSound, false, 0.7f);
+							}
+						}
+
+						boss.flash = 6;
+						shake = finisher ? 16 : 6;
+						if (player.invincible < 15) player.invincible = 15;
+
+						//ブレイク中ノックバックしない
+						if (boss.type != 2 && !(boss.type == 0 && boss.isBroken))
+						{
+							float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
+							boss.x = Clamp(boss.x + player.dir * knock, 0.0f, kScreenW - boss.w);
+						}
+					}
+
+					for (int i = 0; i < kMaxEBullets; i++) {
+						EBullet& eb = ebullets[i];
+						if (!eb.active || eb.wave || eb.reflected || eb.unparryable) continue;
+						if (HitBox(ax, ay, aw, ah, eb.x - eb.r, eb.y - eb.r, eb.r * 2.0f, eb.r * 2.0f)) {
+							eb.active = false;
+						}
+					}
+				}
+				if (introTimer > 0)
+				{
+					introTimer--;
+					// コウモリが飛び始めた瞬間にBGMをループ再生
+					if (currentStage == 0 && introTimer == 80) {
+						if (!Novice::IsPlayingAudio(jesseBgmHandle)) {
+							jesseBgmHandle = Novice::PlayAudio(jesseBgmSound, true, 0.5f);
+						}
+					}
+				}
+				else
+				{
+					float bcx = boss.x + boss.w * 0.5f;
+					float bcy = boss.y + boss.h * 0.5f;
+					float pcx = player.x + player.w * 0.5f;
+					float pcy = player.y + player.h * 0.5f;
+					float aim = atan2f(pcy - bcy, pcx - bcx);
+
+					if (boss.isDying) {
+						Novice::StopAudio(jesseBgmHandle);
+						boss.dieTimer++;
+						if (boss.dieTimer == 1) 
+						{
+							//やられ効果音
+							jesseDownHandle = Novice::PlayAudio(jesseDownSound, false, 1.0f);
+						}
+						// もし空中でトドメを刺した場合は地面まで落とす
+						if (boss.y + boss.h < groundY) {
+							boss.vy += kGravity;
+							boss.y += boss.vy;
+							if (boss.y + boss.h >= groundY) {
+								boss.y = groundY - boss.h;
+								boss.vy = 0.0f;
+							}
+						}
+						// 倒した後のアニメーション再生時間
+						if (boss.dieTimer >= 120) {
+							if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
+								bestFrames[currentStage] = playFrames;
+							}
+							shake = 0;
+							gShakeX = 0;
+							gShakeY = 0;
+							isScreenReversex = false;
+							isScreenReversey = false;
+							isReverseAttackUsed = false;
+							scene = kVictory;
+						}
+					}
+					else if (boss.isBroken) {
+						boss.breakTimer--;
+						boss.hidden = false;
+						boss.timeStopTimer = 0;
+						boss.timeStopPrepTimer = 0;
+						if (boss.y + boss.h < groundY) {
+							boss.vy += kGravity;
+							boss.y += boss.vy;
+							if (boss.y + boss.h >= groundY) {
+								boss.y = groundY - boss.h;
+								boss.vy = 0.0f;
+							}
+						}
+						if (boss.breakTimer <= 0) {
+							boss.isBroken = false;
+							boss.breakGauge = boss.maxBreakGauge;
+							boss.state = 0;
+							boss.timer = (boss.type == 2) ? 120 : 60;
+						}
+					}
+					else {
+						if (boss.type == 0) {
+							// ==========================================
+							// ステージ1 スナイパー型 ボスAI
+							// ==========================================
+							if (boss.muzzleFlashTimer > 0) boss.muzzleFlashTimer--;
+							switch (boss.state) {
+							case 0:
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								boss.x += boss.dir * 1.5f;
+								boss.timer--;
+								if (boss.timer <= 0) {
+									int pick = rand() % 3;
+									if (pick == 0) {
+										boss.state = 1;
+										boss.timer = 70;
+										boss.aimAngle = aim;
+										// 構えた時の音を再生
+										jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
+									}
+									else if (pick == 1) {
+										boss.state = 2;
+										boss.timer = 70;
+										boss.aimAngle = aim;
+										// 構えた時の音を再生
+										jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
+									}
+									else {
+										boss.state = 3;
+										boss.timer = 100;
+										boss.isRareMeteor = (rand() % 7 == 0);
+										// チャージ中の音を再生
+										jesseChargeHandle = Novice::PlayAudio(jesseChargeSound, false, 0.7f);
+									}
+								}
+								break;
+							case 1:
+								// 連射攻撃
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								if (boss.timer > 45) {
+									// プレイヤーを追尾して狙う
+									boss.aimAngle = aim;
+								}
+								else if (boss.timer > 0 && boss.timer % 15 == 0) {
+									boss.aimAngle = aim;
+									FireAngle(ebullets, bcx, bcy - 20.0f, boss.aimAngle, 9.0f, 8.0f);
+									// 発射音を再生
+									jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
+									boss.x -= boss.dir * 8.0f; // 発射の反動で後ろに下がる
+									boss.muzzleFlashTimer = 6; // マズルフラッシュ点灯
+								}
+								boss.timer--;
+								if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
+								break;
+							case 2:
+								// 3弾
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								if (boss.timer > 35) {
+									boss.aimAngle = aim;
+								}
+								else if (boss.timer == 35)
+								{
+									// 発射音を再生
+									jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
+									for (int i = -1; i <= 1; i++) {
+										FireAngle(ebullets, bcx, bcy - 10.0f, boss.aimAngle + i * 0.2f, 7.0f, 10.0f);
+									}
+									boss.x -= boss.dir * 14.0f; // 3弾は少し大きめの反動
+									boss.muzzleFlashTimer = 8;
+								}
+								boss.timer--;
+								if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
+								break;
+							case 3:
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								// チャージ中
+								// メテオが降り始める瞬間にチャージ音を止める
+								if (boss.timer == 40)
+								{
+									if (Novice::IsPlayingAudio(jesseChargeHandle))
+									{
+										Novice::StopAudio(jesseChargeHandle);
+									}
+									// メテオの音を再生
+									jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 1.5f);
+								}
+								// メテオ降下中は少し移動
+								if (boss.timer <= 40) {
+									boss.x += boss.dir * 1.5f;
+								}
+								boss.timer--;
+								if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 3 == 0) {
+									float startX = static_cast<float>(rand() % kScreenW);
+									float targetX = static_cast<float>(rand() % kScreenW);
+									float meteorVx = (targetX - startX) / 55.0f;
+									// 今回のメテオ攻撃がレアなら全部レアメテオになる
+									FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
+								}
+								if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
+								break;
+							case 4:
+								boss.timer--;
+								if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+								break;
+							}
+						}
+
+						////ステージ２
+						else if (boss.type == 1) {
+							switch (boss.state) {
+							case 0:
+
+								if (boss.timer <= 0) {
+									int pick = rand() % 4;
+
+									if (pick == 0) {
+										boss.state = 2;
+										boss.timer = 25;
+									}
+									else if (pick == 1 || pick == 2) {
+										boss.state = 3;
+										boss.timer = 25;
+									}
+									else {
+										boss.state = 6;
+										boss.timer = 60;
+									}
+									//break;
+								}
+
+							case 1:
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								boss.x += boss.dir * 2.5f;
+								boss.timer--;
+								if (boss.timer <= 0) {
+									boss.state = (rand() % 6 == 0) ? 5 : 6;//ここで	ランダムに攻撃を決めてるんだねぇ
+									if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
+									else { boss.timer = 25; }
+								}
+								break;
+							case 2:
+								boss.x += boss.dir * 16.0f;
+								boss.timer--;
+								if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
+									shake = 12; boss.state = 0; boss.timer = 80;
+								}
+								break;
+							case 3:
+								boss.timer--;
+								if (boss.timer <= 0) {
+									boss.vy = -22.0f;
+									boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
+									boss.state = 4;
+								}
+								break;
+							case 4:
+								boss.vy += kGravity;
+								boss.x += boss.vx;
+								boss.y += boss.vy;
+								boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
+								if (boss.y + boss.h >= groundY) {
+									boss.y = groundY - boss.h;
+									boss.vy = 0.0f;
+									shake = 18;
+									FireEBullet(ebullets, boss.x, groundY - 14.0f, -8.0f, 0.0f, 16.0f, true);
+									FireEBullet(ebullets, boss.x + boss.w, groundY - 14.0f, 8.0f, 0.0f, 16.0f, true);
+									boss.state = 0; boss.timer = 90;
+								}
+								break;
+							case 5:
+								boss.timer--;
+								if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
+								break;
+							case 6:
+								PrintfCenter(640, 200, "REVERSE ATTACK!!");
+								// 画面反転攻撃
+								if (!isReverseAttackUsed) {
+									isScreenReversex = !isScreenReversex;
+									isScreenReversey = !isScreenReversey;
+
+									isReverseAttackUsed = true;
+								}
+								boss.timer--;
+								if (boss.timer <= 0) {
+									boss.state = 0;
+									boss.timer = 90;
+									// 次の反転攻撃に備える
+									isReverseAttackUsed = false;
+								}
+								break;
+							}
+						}
+						////反転攻撃が来た場合の移動処理（ステージ２のみ使用）
+						//if (isReverseAttackUsed = true) {
+						//	if (keys[DIK_A]) {
+						//		player.vx = kMoveSpeed;
+						//		player.dir = 1;
+						//	}
+						//	if (keys[DIK_D]) {
+						//		player.vx = -kMoveSpeed;
+						//		player.dir = -1;
+						//	}
+						//}
+
+
+
+						else {
+							// ==========================================
+							// ステージ3 ウィザード型 ボスAI
+							// ==========================================
+							if (boss.phase == 1 && boss.hp < static_cast<int>(boss.maxHp * 0.6f)) {
+								boss.phase = 2;
+								boss.hidden = false;
+								boss.vx = 0.0f;
+								boss.vy = 0.0f;
+								boss.y = groundY - boss.h;
+								boss.state = 0;
+								boss.timer = 90;
+								boss.currentPattern = -1;
+								boss.timeStopTimer = 0;
+								boss.timeStopPrepTimer = 0;
+								boss.flash = 20;
+								shake = 18;
+								for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
+								RefillStage3Patterns(boss);
+							}
+
+							if (boss.state == 0) {
+								boss.hidden = false;
+								boss.vx = 0.0f;
+								boss.vy = 0.0f;
+								boss.y = groundY - boss.h;
+								boss.dir = (pcx > bcx) ? 1 : -1;
+								boss.timer--;
+								if (boss.timer <= 0) {
+									boss.currentPattern = PopStage3Pattern(boss);
+									boss.state = 1;
+									boss.subState = 0;
+									boss.subTimer = 0;
+									boss.repeatCount = 0;
+									boss.timeStopPrepTimer = 0;
+								}
+							}
+							else if (boss.state == 1) {
+								if (boss.currentPattern >= 7 && boss.currentPattern <= 10 && boss.timeStopPrepTimer < 60) {
+									boss.timeStopPrepTimer++;
+									if (boss.timeStopPrepTimer == 60) {
+										boss.subTimer = 0;
+									}
+								}
+								else {
+									switch (boss.currentPattern) {
+									case 0:
+										if (boss.subState == 0) {
+											boss.hidden = true;
+											boss.subTimer++;
+											if (boss.subTimer >= 35) {
+												float behindOffset = 150.0f;
+												float spawnCx = pcx - player.dir * behindOffset;
+												if (spawnCx < 40.0f || spawnCx > kScreenW - 40.0f) {
+													spawnCx = pcx + player.dir * behindOffset;
+												}
+												boss.x = Clamp(spawnCx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
+												boss.y = groundY - boss.h;
+												boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+												boss.hidden = false;
+												boss.flash = 8;
+												boss.subState = 1;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											if (boss.subTimer >= 12) {
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.x += boss.dir * 22.0f;
+											boss.subTimer++;
+											if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.subTimer >= 35) {
+												shake = 10;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 1:
+										if (boss.subState == 0) {
+											boss.hidden = true;
+											boss.subTimer++;
+											if (boss.subTimer >= 35) {
+												boss.x = Clamp(pcx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
+												boss.y = 70.0f;
+												boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+												boss.hidden = false;
+												boss.flash = 8;
+												boss.subState = 1;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											if (boss.subTimer >= 12) {
+												boss.subState = 2;
+												boss.vy = 26.0f;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.y += boss.vy;
+											if (boss.y + boss.h >= groundY) {
+												boss.y = groundY - boss.h;
+												boss.vy = 0.0f;
+												shake = 14;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 2:
+										boss.dir = (pcx > bcx) ? 1 : -1;
+										boss.subTimer++;
+										if (boss.subTimer % 45 == 1) {
+											FireEBullet(ebullets, 10.0f, groundY - 14.0f, 7.0f, 0.0f, 12.0f, false, false, true);
+											FireEBullet(ebullets, kScreenW - 10.0f, groundY - 14.0f, -7.0f, 0.0f, 12.0f, false, false, true);
+										}
+										if (boss.subTimer % 36 == 18) {
+											FireAngle(ebullets, bcx, bcy, aim, 8.0f, 10.0f, false);
+										}
+										if (boss.subTimer >= 210) {
+											boss.state = 0;
+											boss.timer = 120;
+										}
+										break;
+
+									case 3:
+										if (boss.subState == 0) {
+											boss.startX = boss.x;
+											boss.startY = boss.y;
+											boss.targetX = static_cast<float>(100 + rand() % (kScreenW - 200));
+											boss.targetY = static_cast<float>(90 + rand() % 220);
+											boss.subState = 1;
+											boss.subTimer = 0;
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											float t = boss.subTimer / 20.0f;
+											boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+											boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+											boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
+											if (boss.subTimer >= 20) {
+												float curCx = boss.x + boss.w * 0.5f;
+												float curCy = boss.y + boss.h * 0.5f;
+												float ang = atan2f(pcy - curCy, pcx - curCx);
+												float endX, endY;
+												CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
+												SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 35, 16, true);
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer >= 52) {
+												boss.y = groundY - boss.h;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 4:
+										if (boss.subState == 0) {
+											boss.startX = boss.x;
+											boss.startY = boss.y;
+											boss.targetX = kScreenW * 0.5f - boss.w * 0.5f;
+											boss.targetY = 180.0f;
+											boss.subState = 1;
+											boss.subTimer = 0;
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											float t = boss.subTimer / 25.0f;
+											boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+											boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+											if (boss.subTimer >= 25) {
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer % 18 == 1 && boss.subTimer <= 220) {
+												float curCx = boss.x + boss.w * 0.5f;
+												float curCy = boss.y + boss.h * 0.5f;
+												float degOffset = static_cast<float>((rand() % 121) - 60);
+												float ang = -kPi * 0.5f + degOffset * (kPi / 180.0f);
+												float endX, endY;
+												CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
+												SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 25, 14, true);
+											}
+											if (boss.subTimer >= 260) {
+												boss.y = groundY - boss.h;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 5:
+										if (boss.subState == 0) {
+											boss.startX = boss.x;
+											boss.startY = boss.y;
+											boss.targetX = kScreenW - boss.w - 40.0f;
+											boss.targetY = 120.0f;
+											boss.subState = 1;
+											boss.subTimer = 0;
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											float t = boss.subTimer / 25.0f;
+											boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+											boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+											if (boss.subTimer >= 25) {
+												boss.subState = 2;
+												boss.subTimer = 0;
+												boss.dir = -1;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.x -= 11.0f;
+											boss.subTimer++;
+											if (boss.subTimer % 8 == 0) {
+												bool isBullet2 = ((boss.subTimer / 8) % 2 == 0);
+												float bvx = static_cast<float>((rand() % 5) - 2);
+												FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
+											}
+											if (boss.x <= 40.0f) {
+												boss.x = 40.0f;
+												boss.subState = 3;
+												boss.subTimer = 0;
+												boss.dir = 1;
+											}
+										}
+										else if (boss.subState == 3) {
+											boss.x += 11.0f;
+											boss.subTimer++;
+											if (boss.subTimer % 8 == 0) {
+												bool isBullet2 = ((boss.subTimer / 8) % 2 == 0);
+												float bvx = static_cast<float>((rand() % 5) - 2);
+												FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
+											}
+											if (boss.x >= kScreenW - boss.w - 40.0f) {
+												boss.y = groundY - boss.h;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 6:
+										if (boss.subState == 0) {
+											boss.startX = boss.x;
+											boss.startY = boss.y;
+											boss.targetX = 980.0f;
+											boss.targetY = 200.0f;
+											boss.subState = 1;
+											boss.subTimer = 0;
+										}
+										else if (boss.subState == 1) {
+											boss.subTimer++;
+											float t = boss.subTimer / 25.0f;
+											boss.x = boss.startX + (boss.targetX - boss.startX) * t;
+											boss.y = boss.startY + (boss.targetY - boss.startY) * t;
+											if (boss.subTimer >= 25) {
+												boss.subState = 2;
+												boss.subTimer = 0;
+												boss.angleOffset = 0.0f;
+												SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 260, false, true, -kScreenW / 260.0f, true);
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.dir = -1;
+											boss.subTimer++;
+											if (boss.subTimer % 28 == 1 && boss.subTimer <= 220) {
+												float curCx = boss.x + boss.w * 0.5f;
+												float curCy = boss.y + boss.h * 0.5f;
+												for (int i = 0; i < 16; i++) {
+													float ang = boss.angleOffset + i * (2.0f * kPi / 16.0f);
+													bool isBullet2 = (i % 2 == 1);
+													FireAngle(ebullets, curCx, curCy, ang, 5.2f, 8.0f, isBullet2);
+												}
+												boss.angleOffset += 5.0f * (kPi / 180.0f);
+											}
+											if (boss.subTimer == 130) {
+												SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 130, false, true, -kScreenW / 130.0f, true);
+											}
+											if (boss.subTimer >= 260) {
+												boss.y = groundY - boss.h;
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 7:
+										if (boss.subState == 0) {
+											boss.timeStopTimer = 90;
+											boss.subState = 1;
+											boss.subTimer = 0;
+											shake = 12;
+
+											const float dist = 160.0f;
+											for (int k = 0; k < 4; k++) {
+												float ang = k * (kPi * 0.5f);
+												float bx = pcx + cosf(ang) * dist;
+												float by = pcy + sinf(ang) * dist;
+
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (!ebullets[i].active) {
+														ebullets[i].active = true;
+														ebullets[i].x = bx;
+														ebullets[i].y = by;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 0.0f;
+														ebullets[i].r = 11.0f;
+														ebullets[i].wave = false;
+														ebullets[i].reflected = false;
+														ebullets[i].meteor = false;
+														ebullets[i].unparryable = true;
+														ebullets[i].useGravity = false;
+														ebullets[i].spawnLaserOnLand = false;
+														ebullets[i].waitTimeStop = true;
+														ebullets[i].aimX = pcx;
+														ebullets[i].aimY = pcy;
+														ebullets[i].launchSpeed = 11.5f;
+														break;
+													}
+												}
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.timeStopTimer--;
+											for (int i = 0; i < kMaxEBullets; i++) {
+												if (ebullets[i].active && ebullets[i].waitTimeStop) {
+													ebullets[i].aimX = pcx;
+													ebullets[i].aimY = pcy;
+												}
+											}
+											if (boss.timeStopTimer <= 0) {
+												boss.timeStopTimer = 0;
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (ebullets[i].active && ebullets[i].waitTimeStop) {
+														ebullets[i].waitTimeStop = false;
+														float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
+														ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
+														ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
+													}
+												}
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer >= 40) {
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 8:
+										if (boss.subState == 0) {
+											boss.timeStopTimer = 90;
+											boss.subState = 1;
+											boss.subTimer = 0;
+											shake = 12;
+
+											const float dist = 160.0f;
+											for (int k = 0; k < 4; k++) {
+												float ang = (45.0f * (kPi / 180.0f)) + k * (kPi * 0.5f);
+												float bx = pcx + cosf(ang) * dist;
+												float by = pcy + sinf(ang) * dist;
+
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (!ebullets[i].active) {
+														ebullets[i].active = true;
+														ebullets[i].x = bx;
+														ebullets[i].y = by;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 0.0f;
+														ebullets[i].r = 11.0f;
+														ebullets[i].wave = false;
+														ebullets[i].reflected = false;
+														ebullets[i].meteor = false;
+														ebullets[i].unparryable = true;
+														ebullets[i].useGravity = false;
+														ebullets[i].spawnLaserOnLand = false;
+														ebullets[i].waitTimeStop = true;
+														ebullets[i].aimX = pcx;
+														ebullets[i].aimY = pcy;
+														ebullets[i].launchSpeed = 11.5f;
+														break;
+													}
+												}
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.timeStopTimer--;
+											for (int i = 0; i < kMaxEBullets; i++) {
+												if (ebullets[i].active && ebullets[i].waitTimeStop) {
+													ebullets[i].aimX = pcx;
+													ebullets[i].aimY = pcy;
+												}
+											}
+											if (boss.timeStopTimer <= 0) {
+												boss.timeStopTimer = 0;
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (ebullets[i].active && ebullets[i].waitTimeStop) {
+														ebullets[i].waitTimeStop = false;
+														float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
+														ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
+														ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
+													}
+												}
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer >= 40) {
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 9:
+										if (boss.subState == 0) {
+											boss.timeStopTimer = 90;
+											boss.subState = 1;
+											boss.subTimer = 0;
+											shake = 12;
+
+											const float dist = 170.0f;
+											for (int k = 0; k < 8; k++) {
+												float ang = k * (2.0f * kPi / 8.0f);
+												float bx = pcx + cosf(ang) * dist;
+												float by = pcy + sinf(ang) * dist;
+
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (!ebullets[i].active) {
+														ebullets[i].active = true;
+														ebullets[i].x = bx;
+														ebullets[i].y = by;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 0.0f;
+														ebullets[i].r = 10.0f;
+														ebullets[i].wave = false;
+														ebullets[i].reflected = false;
+														ebullets[i].meteor = false;
+														ebullets[i].unparryable = false;
+														ebullets[i].useGravity = false;
+														ebullets[i].spawnLaserOnLand = false;
+														ebullets[i].waitTimeStop = true;
+														ebullets[i].aimX = pcx;
+														ebullets[i].aimY = pcy;
+														ebullets[i].launchSpeed = 10.0f;
+														break;
+													}
+												}
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.timeStopTimer--;
+											for (int i = 0; i < kMaxEBullets; i++) {
+												if (ebullets[i].active && ebullets[i].waitTimeStop) {
+													ebullets[i].aimX = pcx;
+													ebullets[i].aimY = pcy;
+												}
+											}
+											if (boss.timeStopTimer <= 0) {
+												boss.timeStopTimer = 0;
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (ebullets[i].active && ebullets[i].waitTimeStop) {
+														ebullets[i].waitTimeStop = false;
+														float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
+														ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
+														ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
+													}
+												}
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer >= 40) {
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+
+									case 10:
+										if (boss.subState == 0) {
+											boss.timeStopTimer = 90;
+											boss.subState = 1;
+											boss.subTimer = 0;
+											shake = 14;
+
+											for (int k = 0; k < 10; k++) {
+												float bx = static_cast<float>(50 + rand() % (kScreenW - 100));
+												float by = static_cast<float>(50 + rand() % 150);
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (!ebullets[i].active) {
+														ebullets[i].active = true;
+														ebullets[i].x = bx;
+														ebullets[i].y = by;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 0.0f;
+														ebullets[i].r = 9.0f;
+														ebullets[i].wave = false;
+														ebullets[i].reflected = false;
+														ebullets[i].meteor = false;
+														ebullets[i].unparryable = false;
+														ebullets[i].useGravity = false;
+														ebullets[i].spawnLaserOnLand = false;
+														ebullets[i].waitTimeStop = true;
+														break;
+													}
+												}
+											}
+											for (int k = 0; k < 20; k++) {
+												float bx = static_cast<float>(30 + rand() % (kScreenW - 60));
+												float by = static_cast<float>(30 + rand() % 200);
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (!ebullets[i].active) {
+														ebullets[i].active = true;
+														ebullets[i].x = bx;
+														ebullets[i].y = by;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 0.0f;
+														ebullets[i].r = 9.0f;
+														ebullets[i].wave = false;
+														ebullets[i].reflected = false;
+														ebullets[i].meteor = false;
+														ebullets[i].unparryable = true;
+														ebullets[i].useGravity = false;
+														ebullets[i].spawnLaserOnLand = true;
+														ebullets[i].waitTimeStop = true;
+														break;
+													}
+												}
+											}
+										}
+										else if (boss.subState == 1) {
+											boss.timeStopTimer--;
+											if (boss.timeStopTimer <= 0) {
+												boss.timeStopTimer = 0;
+												for (int i = 0; i < kMaxEBullets; i++) {
+													if (ebullets[i].active && ebullets[i].waitTimeStop) {
+														ebullets[i].waitTimeStop = false;
+														ebullets[i].vx = 0.0f;
+														ebullets[i].vy = 8.0f;
+													}
+												}
+												boss.subState = 2;
+												boss.subTimer = 0;
+											}
+										}
+										else if (boss.subState == 2) {
+											boss.subTimer++;
+											if (boss.subTimer >= 60) {
+												boss.state = 0;
+												boss.timer = 120;
+											}
+										}
+										break;
+									}
+								}
+							}
+						}
+					}
+					// 登場演出用コウモリの移動更新（introTimerが0になった後も画面外へ出るまで飛び続ける）
+					if (currentStage == 0 && introTimer < 80)
+					{
+						bool anyBatActive = false; //1匹でも飛んでいるかのフラグ
+						for (int i = 0; i < kMaxIntroBats; i++)
+						{
+							if (!introBats[i].active) continue;
+							anyBatActive = true; 
+							introBats[i].x += introBats[i].vx;
+							introBats[i].y += introBats[i].vy;
+							// 画面外に出たら消す
+							if (introBats[i].x < -64.0f || introBats[i].x > kScreenW + 64.0f ||
+								introBats[i].y < -64.0f || introBats[i].y > kScreenH + 64.0f)
+							{
+								introBats[i].active = false;
+							}
+						}
+						// コウモリが飛んでいる間だけ音をループ再生（多重再生防止）
+						if (anyBatActive) {
+							if (!Novice::IsPlayingAudio(batHandle)) {
+								batHandle = Novice::PlayAudio(batSound, true, 2.0f); // 第2引数をtrueにしてループ
+							}
+						}
+						else {
+							// 全てのコウモリが画面外に出たら音を止める
+							if (Novice::IsPlayingAudio(batHandle)) {
+								Novice::StopAudio(batHandle);
+							}
+						}
+						//吹き飛ばしエフェクトのタイマーを減らす
+						if (boss.repelEffectTimer > 0)
+						{
+							boss.repelEffectTimer--;
+						}
+					}
+					boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
+
+					// ==================================================
+					// レーザーの更新と当たり判定
+					// ==================================================
+					if (!isTimeStopped) {
+						for (int i = 0; i < kMaxLasers; i++) {
+							Laser& lz = lasers[i];
+							if (!lz.active) continue;
+
+							if (lz.warnTimer > 0) {
+								lz.warnTimer--;
+								if (lz.warnTimer == 0 && lz.spawnSpread && !lz.spawnedSpread) {
+									lz.spawnedSpread = true;
+									for (int k = 0; k < 16; k++) {
+										float ang = k * (2.0f * kPi / 16.0f);
+										bool isBullet2 = (k % 2 == 1);
+										FireAngle(ebullets, lz.x2, lz.y2, ang, 5.5f, 8.5f, isBullet2);
+									}
+								}
+							}
+							else {
+								if (lz.movingVertical) {
+									lz.x1 += lz.vx;
+									lz.x2 += lz.vx;
+									if (lz.x1 < -50.0f || lz.x1 > kScreenW + 50.0f) {
+										lz.active = false;
+										continue;
+									}
+								}
+								lz.activeTimer--;
+								if (lz.activeTimer <= 0) {
+									lz.active = false;
+									continue;
+								}
+
+								bool canHit = true;
+								if (lz.airPhaseThrough && !player.onGround) {
+									canHit = false;
+								}
+
+								if (canHit && player.invincible == 0 && player.dashTimer == 0) {
+									if (HitLineBox(lz.x1, lz.y1, lz.x2, lz.y2, lz.width * 0.5f, player.x, player.y, player.w, player.h)) {
+										HurtPlayer(player);
+									}
+								}
+							}
+						}
+					}
+
+					// ==================================================
+					// ボスの弾の更新とパリィ・被弾判定
+					// ==================================================
+					if (!isTimeStopped) {
+						for (int i = 0; i < kMaxEBullets; i++) {
+							EBullet& b = ebullets[i];
+							if (!b.active) continue;
+
+							if (b.waitTimeStop) continue;
+
+							if (b.useGravity) {
+								b.vy += kGravity * 0.45f;
+							}
+
+							b.x += b.vx;
+							b.y += b.vy;
+
+							if (b.spawnLaserOnLand && b.y >= groundY) {
+								SpawnLaser(lasers, b.x, 0.0f, b.x, groundY, 26.0f, 30, 15, false);
+								b.active = false;
+								continue;
+							}
+
+							if (b.x < -60.0f || b.x > kScreenW + 60.0f || b.y < -120.0f || b.y > kScreenH + 60.0f) {
+								b.active = false;
+								continue;
+							}
+
+							if (b.reflected) {
+								if (!boss.hidden && HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
+									b.active = false;
+									bool wasBroken = boss.isBroken;
+									DamageBossBreak(boss, 150, shake);
+									// ステージ1のエネミーにパリィ弾が当たった時の効果音
+									if (boss.type == 0)
+									{
+										parryHitHandle = Novice::PlayAudio(parryHitSound, false, 1.0f);
+									}
+									//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
+									if (!wasBroken && boss.isBroken && boss.type == 0)
+									{
+										jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 1.0f);
+										// もしチャージ中だったらチャージ音も止める
+										if (Novice::IsPlayingAudio(jesseChargeHandle))
+										{
+											Novice::StopAudio(jesseChargeHandle);
+										}
+									}
+									boss.flash = 10;
+									shake = 8;
+								}
+								continue;
+							}
+
+							if (!b.unparryable && player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
+								if (b.wave) {
+									b.active = false;
+								}
+								else {
+									b.reflected = true;
+									b.useGravity = false;
+									float ang = atan2f(bcy - b.y, bcx - b.x);
+									b.vx = cosf(ang) * 14.0f;
+									b.vy = sinf(ang) * 14.0f;
+									b.r = 14.0f;
+								}
+
+								player.parryCooldown = 0;
+								player.invincible = 20;
+								player.parryFlash = 10;
+								// パリィした時のサウンド!!!!!!!!!!!!!!!!!!!
+								parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
+								shake = 6;
+							}
+							else if (player.invincible == 0 && player.dashTimer == 0 &&
+								HitBox(player.x, player.y, player.w, player.h, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
+								HurtPlayer(player);
+								if (!b.wave) b.active = false;
+							}
+						}
+					}
+
+					if (boss.type == 2) {
+						bool bossRushActive = (boss.state == 1 && (boss.currentPattern == 0 || boss.currentPattern == 1) && boss.subState == 2);
+						if (bossRushActive && !boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
+							if (player.invincible == 0 && player.dashTimer == 0) {
+								HurtPlayer(player);
+							}
+						}
+					}
+					else if (!boss.isBroken && !boss.hidden && !boss.isDying && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
+						if (player.parryTimer > 0) {
+							boss.state = 4;
+							boss.timer = 70;
+							boss.flash = 8;
+							player.invincible = 30;
+							player.parryCooldown = 0;
+							player.parryFlash = 10;
+							// ボス本体にパリィした時のサウンド!!!!!!!!!!!!!!!!!!!
+							parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
+							player.vy = -9.0f;
+							player.onGround = false;
+							shake = 10;
+						}
+						else if (player.invincible == 0 && player.dashTimer == 0) {
+							HurtPlayer(player);
+						}
+					}
+				}
+
+				if (boss.hp <= 0) {
+					boss.hp = 0;
+					for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
+					for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
+
+					// ステージ1ならやられ演出を開始（ステージ2・3は今まで通り即クリア）
+					if (boss.type == 0) {
+						if (!boss.isDying) {
+							boss.isDying = true;
+							boss.dieTimer = 0;
+							boss.isBroken = false;
+							boss.repelEffectTimer = 0;
+							// トドメを刺された瞬間のプレイヤーがいる方向を向かせる
+							boss.dir = ((player.x + player.w * 0.5f) > (boss.x + boss.w * 0.5f)) ? 1 : -1;
+							CancelAttack(player); //プレイヤーの攻撃状態をリセット
+							shake = 25;
+							hitStopTimer = 15;
+							// 撃墜の音を再生
+							jesseShootDownHandle = Novice::PlayAudio(jesseShootDownSound, false, 1.0f);
+							// チャージ音やBGMを止める場合
+							if (Novice::IsPlayingAudio(jesseChargeHandle)) {
+								Novice::StopAudio(jesseChargeHandle);
+							}
+						}
+					}
+					else {
 						if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
 							bestFrames[currentStage] = playFrames;
 						}
@@ -1189,1054 +2254,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						scene = kVictory;
 					}
 				}
-				else if (boss.isBroken) {
-					boss.breakTimer--;
-					boss.hidden = false;
-					boss.timeStopTimer = 0;
-					boss.timeStopPrepTimer = 0;
-					if (boss.y + boss.h < groundY) {
-						boss.vy += kGravity;
-						boss.y += boss.vy;
-						if (boss.y + boss.h >= groundY) {
-							boss.y = groundY - boss.h;
-							boss.vy = 0.0f;
-						}
-					}
-					if (boss.breakTimer <= 0) {
-						boss.isBroken = false;
-						boss.breakGauge = boss.maxBreakGauge;
-						boss.state = 0;
-						boss.timer = (boss.type == 2) ? 120 : 60;
-					}
-				}
-				else {
-					if (boss.type == 0) {
-						// ==========================================
-						// ステージ1 スナイパー型 ボスAI
-						// ==========================================
-						if (boss.muzzleFlashTimer > 0) boss.muzzleFlashTimer--;
-						switch (boss.state) {
-						case 0:
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							boss.x += boss.dir * 1.5f;
-							boss.timer--;
-							if (boss.timer <= 0) {
-								int pick = rand() % 3;
-								if (pick == 0) {
-									boss.state = 1;
-									boss.timer = 70;
-									boss.aimAngle = aim;
-									// 構えた時の音を再生
-									jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
-								}
-								else if (pick == 1) {
-									boss.state = 2;
-									boss.timer = 70;
-									boss.aimAngle = aim;
-									// 構えた時の音を再生
-									jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
-								}
-								else {
-									boss.state = 3;
-									boss.timer = 100;
-									boss.isRareMeteor = (rand() % 7 == 0);
-									// チャージ中の音を再生
-									jesseChargeHandle = Novice::PlayAudio(jesseChargeSound, false, 0.7f);
-								}
-							}
-							break;
-						case 1:
-							// 連射攻撃
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							if (boss.timer > 45) {
-								// プレイヤーを追尾して狙う
-								boss.aimAngle = aim;
-							}
-							else if (boss.timer > 0 && boss.timer % 15 == 0) {
-								boss.aimAngle = aim;
-								FireAngle(ebullets, bcx, bcy - 20.0f, boss.aimAngle, 9.0f, 8.0f);
-								// 発射音を再生
-								jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
-								boss.x -= boss.dir * 8.0f; // 発射の反動で後ろに下がる
-								boss.muzzleFlashTimer = 6; // マズルフラッシュ点灯
-							}
-							boss.timer--;
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
-							break;
-						case 2:
-							// 3弾
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							if (boss.timer > 35) {
-								boss.aimAngle = aim;
-							}
-							else if (boss.timer == 35)
-							{
-								// 発射音を再生
-								jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
-								for (int i = -1; i <= 1; i++) {
-									FireAngle(ebullets, bcx, bcy - 10.0f, boss.aimAngle + i * 0.2f, 7.0f, 10.0f);
-								}
-								boss.x -= boss.dir * 14.0f; // 3弾は少し大きめの反動
-								boss.muzzleFlashTimer = 8;
-							}
-							boss.timer--;
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 90; }
-							break;
-						case 3:
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							// チャージ中
-							// メテオが降り始める瞬間にチャージ音を止める
-							if (boss.timer == 40)
-							{
-								if (Novice::IsPlayingAudio(jesseChargeHandle))
-								{
-									Novice::StopAudio(jesseChargeHandle);
-								}
-								// メテオの音を再生
-								jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 1.5f);
-							}
-							// メテオ降下中は少し移動
-							if (boss.timer <= 40) {
-								boss.x += boss.dir * 1.5f;
-							}
-							boss.timer--;
-							if (boss.timer <= 40 && boss.timer > 0 && boss.timer % 3 == 0) {
-								float startX = static_cast<float>(rand() % kScreenW);
-								float targetX = static_cast<float>(rand() % kScreenW);
-								float meteorVx = (targetX - startX) / 55.0f;
-								// 今回のメテオ攻撃がレアなら全部レアメテオになる
-								FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
-							}
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
-							break;
-						case 4:
-							boss.timer--;
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-							break;
-						}
-					}
-
-					////ステージ２
-					else if (boss.type == 1) {
-						switch (boss.state) {
-						case 0:
-
-							if (boss.timer <= 0) {
-								int pick = rand() % 4;
-
-								if (pick == 0) {
-									boss.state = 2;
-									boss.timer = 25;
-								}
-								else if (pick == 1 || pick == 2) {
-									boss.state = 3;
-									boss.timer = 25;
-								}
-								else {
-									boss.state = 6;
-									boss.timer = 60;
-								}
-								//break;
-							}
-
-						case 1:
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							boss.x += boss.dir * 2.5f;
-							boss.timer--;
-							if (boss.timer <= 0) {
-								boss.state = (rand() % 6 == 0) ? 5 : 6;//ここで	ランダムに攻撃を決めてるんだねぇ
-								if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
-								else { boss.timer = 25; }
-							}
-							break;
-						case 2:
-							boss.x += boss.dir * 16.0f;
-							boss.timer--;
-							if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.timer <= 0) {
-								shake = 12; boss.state = 0; boss.timer = 80;
-							}
-							break;
-						case 3:
-							boss.timer--;
-							if (boss.timer <= 0) {
-								boss.vy = -22.0f;
-								boss.vx = Clamp((pcx - bcx) / 30.0f, -8.0f, 8.0f);
-								boss.state = 4;
-							}
-							break;
-						case 4:
-							boss.vy += kGravity;
-							boss.x += boss.vx;
-							boss.y += boss.vy;
-							boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
-							if (boss.y + boss.h >= groundY) {
-								boss.y = groundY - boss.h;
-								boss.vy = 0.0f;
-								shake = 18;
-								FireEBullet(ebullets, boss.x, groundY - 14.0f, -8.0f, 0.0f, 16.0f, true);
-								FireEBullet(ebullets, boss.x + boss.w, groundY - 14.0f, 8.0f, 0.0f, 16.0f, true);
-								boss.state = 0; boss.timer = 90;
-							}
-							break;
-						case 5:
-							boss.timer--;
-							if (boss.timer <= 0) { boss.state = 0; boss.timer = 60; }
-							break;
-						case 6:
-							PrintfCenter(640, 200, "REVERSE ATTACK!!");
-							// 画面反転攻撃
-							if (!isReverseAttackUsed) {
-								isScreenReversex = !isScreenReversex;
-								isScreenReversey = !isScreenReversey;
-
-								isReverseAttackUsed = true;
-							}
-							boss.timer--;
-							if (boss.timer <= 0) {
-								boss.state = 0;
-								boss.timer = 90;
-								// 次の反転攻撃に備える
-								isReverseAttackUsed = false;
-							}
-							break;
-						}
-					}
-					////反転攻撃が来た場合の移動処理（ステージ２のみ使用）
-					//if (isReverseAttackUsed = true) {
-					//	if (keys[DIK_A]) {
-					//		player.vx = kMoveSpeed;
-					//		player.dir = 1;
-					//	}
-					//	if (keys[DIK_D]) {
-					//		player.vx = -kMoveSpeed;
-					//		player.dir = -1;
-					//	}
-					//}
-
-
-
-					else {
-						// ==========================================
-						// ステージ3 ウィザード型 ボスAI
-						// ==========================================
-						if (boss.phase == 1 && boss.hp < static_cast<int>(boss.maxHp * 0.6f)) {
-							boss.phase = 2;
-							boss.hidden = false;
-							boss.vx = 0.0f;
-							boss.vy = 0.0f;
-							boss.y = groundY - boss.h;
-							boss.state = 0;
-							boss.timer = 90;
-							boss.currentPattern = -1;
-							boss.timeStopTimer = 0;
-							boss.timeStopPrepTimer = 0;
-							boss.flash = 20;
-							shake = 18;
-							for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
-							RefillStage3Patterns(boss);
-						}
-
-						if (boss.state == 0) {
-							boss.hidden = false;
-							boss.vx = 0.0f;
-							boss.vy = 0.0f;
-							boss.y = groundY - boss.h;
-							boss.dir = (pcx > bcx) ? 1 : -1;
-							boss.timer--;
-							if (boss.timer <= 0) {
-								boss.currentPattern = PopStage3Pattern(boss);
-								boss.state = 1;
-								boss.subState = 0;
-								boss.subTimer = 0;
-								boss.repeatCount = 0;
-								boss.timeStopPrepTimer = 0;
-							}
-						}
-						else if (boss.state == 1) {
-							if (boss.currentPattern >= 7 && boss.currentPattern <= 10 && boss.timeStopPrepTimer < 60) {
-								boss.timeStopPrepTimer++;
-								if (boss.timeStopPrepTimer == 60) {
-									boss.subTimer = 0;
-								}
-							}
-							else {
-								switch (boss.currentPattern) {
-								case 0:
-									if (boss.subState == 0) {
-										boss.hidden = true;
-										boss.subTimer++;
-										if (boss.subTimer >= 35) {
-											float behindOffset = 150.0f;
-											float spawnCx = pcx - player.dir * behindOffset;
-											if (spawnCx < 40.0f || spawnCx > kScreenW - 40.0f) {
-												spawnCx = pcx + player.dir * behindOffset;
-											}
-											boss.x = Clamp(spawnCx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
-											boss.y = groundY - boss.h;
-											boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
-											boss.hidden = false;
-											boss.flash = 8;
-											boss.subState = 1;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										if (boss.subTimer >= 12) {
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.x += boss.dir * 22.0f;
-										boss.subTimer++;
-										if (boss.x <= 0.0f || boss.x + boss.w >= kScreenW || boss.subTimer >= 35) {
-											shake = 10;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 1:
-									if (boss.subState == 0) {
-										boss.hidden = true;
-										boss.subTimer++;
-										if (boss.subTimer >= 35) {
-											boss.x = Clamp(pcx - boss.w * 0.5f, 0.0f, kScreenW - boss.w);
-											boss.y = 70.0f;
-											boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
-											boss.hidden = false;
-											boss.flash = 8;
-											boss.subState = 1;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										if (boss.subTimer >= 12) {
-											boss.subState = 2;
-											boss.vy = 26.0f;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.y += boss.vy;
-										if (boss.y + boss.h >= groundY) {
-											boss.y = groundY - boss.h;
-											boss.vy = 0.0f;
-											shake = 14;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 2:
-									boss.dir = (pcx > bcx) ? 1 : -1;
-									boss.subTimer++;
-									if (boss.subTimer % 45 == 1) {
-										FireEBullet(ebullets, 10.0f, groundY - 14.0f, 7.0f, 0.0f, 12.0f, false, false, true);
-										FireEBullet(ebullets, kScreenW - 10.0f, groundY - 14.0f, -7.0f, 0.0f, 12.0f, false, false, true);
-									}
-									if (boss.subTimer % 36 == 18) {
-										FireAngle(ebullets, bcx, bcy, aim, 8.0f, 10.0f, false);
-									}
-									if (boss.subTimer >= 210) {
-										boss.state = 0;
-										boss.timer = 120;
-									}
-									break;
-
-								case 3:
-									if (boss.subState == 0) {
-										boss.startX = boss.x;
-										boss.startY = boss.y;
-										boss.targetX = static_cast<float>(100 + rand() % (kScreenW - 200));
-										boss.targetY = static_cast<float>(90 + rand() % 220);
-										boss.subState = 1;
-										boss.subTimer = 0;
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										float t = boss.subTimer / 20.0f;
-										boss.x = boss.startX + (boss.targetX - boss.startX) * t;
-										boss.y = boss.startY + (boss.targetY - boss.startY) * t;
-										boss.dir = (pcx > boss.x + boss.w * 0.5f) ? 1 : -1;
-										if (boss.subTimer >= 20) {
-											float curCx = boss.x + boss.w * 0.5f;
-											float curCy = boss.y + boss.h * 0.5f;
-											float ang = atan2f(pcy - curCy, pcx - curCx);
-											float endX, endY;
-											CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
-											SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 35, 16, true);
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer >= 52) {
-											boss.y = groundY - boss.h;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 4:
-									if (boss.subState == 0) {
-										boss.startX = boss.x;
-										boss.startY = boss.y;
-										boss.targetX = kScreenW * 0.5f - boss.w * 0.5f;
-										boss.targetY = 180.0f;
-										boss.subState = 1;
-										boss.subTimer = 0;
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										float t = boss.subTimer / 25.0f;
-										boss.x = boss.startX + (boss.targetX - boss.startX) * t;
-										boss.y = boss.startY + (boss.targetY - boss.startY) * t;
-										if (boss.subTimer >= 25) {
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer % 18 == 1 && boss.subTimer <= 220) {
-											float curCx = boss.x + boss.w * 0.5f;
-											float curCy = boss.y + boss.h * 0.5f;
-											float degOffset = static_cast<float>((rand() % 121) - 60);
-											float ang = -kPi * 0.5f + degOffset * (kPi / 180.0f);
-											float endX, endY;
-											CalcRayEnd(curCx, curCy, ang, groundY, &endX, &endY);
-											SpawnLaser(lasers, curCx, curCy, endX, endY, 22.0f, 25, 14, true);
-										}
-										if (boss.subTimer >= 260) {
-											boss.y = groundY - boss.h;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 5:
-									if (boss.subState == 0) {
-										boss.startX = boss.x;
-										boss.startY = boss.y;
-										boss.targetX = kScreenW - boss.w - 40.0f;
-										boss.targetY = 120.0f;
-										boss.subState = 1;
-										boss.subTimer = 0;
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										float t = boss.subTimer / 25.0f;
-										boss.x = boss.startX + (boss.targetX - boss.startX) * t;
-										boss.y = boss.startY + (boss.targetY - boss.startY) * t;
-										if (boss.subTimer >= 25) {
-											boss.subState = 2;
-											boss.subTimer = 0;
-											boss.dir = -1;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.x -= 11.0f;
-										boss.subTimer++;
-										if (boss.subTimer % 8 == 0) {
-											bool isBullet2 = ((boss.subTimer / 8) % 2 == 0);
-											float bvx = static_cast<float>((rand() % 5) - 2);
-											FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
-										}
-										if (boss.x <= 40.0f) {
-											boss.x = 40.0f;
-											boss.subState = 3;
-											boss.subTimer = 0;
-											boss.dir = 1;
-										}
-									}
-									else if (boss.subState == 3) {
-										boss.x += 11.0f;
-										boss.subTimer++;
-										if (boss.subTimer % 8 == 0) {
-											bool isBullet2 = ((boss.subTimer / 8) % 2 == 0);
-											float bvx = static_cast<float>((rand() % 5) - 2);
-											FireEBullet(ebullets, bcx, bcy, bvx, -2.0f, 10.0f, false, false, isBullet2, true, isBullet2);
-										}
-										if (boss.x >= kScreenW - boss.w - 40.0f) {
-											boss.y = groundY - boss.h;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 6:
-									if (boss.subState == 0) {
-										boss.startX = boss.x;
-										boss.startY = boss.y;
-										boss.targetX = 980.0f;
-										boss.targetY = 200.0f;
-										boss.subState = 1;
-										boss.subTimer = 0;
-									}
-									else if (boss.subState == 1) {
-										boss.subTimer++;
-										float t = boss.subTimer / 25.0f;
-										boss.x = boss.startX + (boss.targetX - boss.startX) * t;
-										boss.y = boss.startY + (boss.targetY - boss.startY) * t;
-										if (boss.subTimer >= 25) {
-											boss.subState = 2;
-											boss.subTimer = 0;
-											boss.angleOffset = 0.0f;
-											SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 260, false, true, -kScreenW / 260.0f, true);
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.dir = -1;
-										boss.subTimer++;
-										if (boss.subTimer % 28 == 1 && boss.subTimer <= 220) {
-											float curCx = boss.x + boss.w * 0.5f;
-											float curCy = boss.y + boss.h * 0.5f;
-											for (int i = 0; i < 16; i++) {
-												float ang = boss.angleOffset + i * (2.0f * kPi / 16.0f);
-												bool isBullet2 = (i % 2 == 1);
-												FireAngle(ebullets, curCx, curCy, ang, 5.2f, 8.0f, isBullet2);
-											}
-											boss.angleOffset += 5.0f * (kPi / 180.0f);
-										}
-										if (boss.subTimer == 130) {
-											SpawnLaser(lasers, kScreenW - 20.0f, 0.0f, kScreenW - 20.0f, groundY, 36.0f, 25, 130, false, true, -kScreenW / 130.0f, true);
-										}
-										if (boss.subTimer >= 260) {
-											boss.y = groundY - boss.h;
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 7:
-									if (boss.subState == 0) {
-										boss.timeStopTimer = 90;
-										boss.subState = 1;
-										boss.subTimer = 0;
-										shake = 12;
-
-										const float dist = 160.0f;
-										for (int k = 0; k < 4; k++) {
-											float ang = k * (kPi * 0.5f);
-											float bx = pcx + cosf(ang) * dist;
-											float by = pcy + sinf(ang) * dist;
-
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (!ebullets[i].active) {
-													ebullets[i].active = true;
-													ebullets[i].x = bx;
-													ebullets[i].y = by;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 0.0f;
-													ebullets[i].r = 11.0f;
-													ebullets[i].wave = false;
-													ebullets[i].reflected = false;
-													ebullets[i].meteor = false;
-													ebullets[i].unparryable = true;
-													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = false;
-													ebullets[i].waitTimeStop = true;
-													ebullets[i].aimX = pcx;
-													ebullets[i].aimY = pcy;
-													ebullets[i].launchSpeed = 11.5f;
-													break;
-												}
-											}
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.timeStopTimer--;
-										for (int i = 0; i < kMaxEBullets; i++) {
-											if (ebullets[i].active && ebullets[i].waitTimeStop) {
-												ebullets[i].aimX = pcx;
-												ebullets[i].aimY = pcy;
-											}
-										}
-										if (boss.timeStopTimer <= 0) {
-											boss.timeStopTimer = 0;
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (ebullets[i].active && ebullets[i].waitTimeStop) {
-													ebullets[i].waitTimeStop = false;
-													float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
-													ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
-													ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
-												}
-											}
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer >= 40) {
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 8:
-									if (boss.subState == 0) {
-										boss.timeStopTimer = 90;
-										boss.subState = 1;
-										boss.subTimer = 0;
-										shake = 12;
-
-										const float dist = 160.0f;
-										for (int k = 0; k < 4; k++) {
-											float ang = (45.0f * (kPi / 180.0f)) + k * (kPi * 0.5f);
-											float bx = pcx + cosf(ang) * dist;
-											float by = pcy + sinf(ang) * dist;
-
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (!ebullets[i].active) {
-													ebullets[i].active = true;
-													ebullets[i].x = bx;
-													ebullets[i].y = by;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 0.0f;
-													ebullets[i].r = 11.0f;
-													ebullets[i].wave = false;
-													ebullets[i].reflected = false;
-													ebullets[i].meteor = false;
-													ebullets[i].unparryable = true;
-													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = false;
-													ebullets[i].waitTimeStop = true;
-													ebullets[i].aimX = pcx;
-													ebullets[i].aimY = pcy;
-													ebullets[i].launchSpeed = 11.5f;
-													break;
-												}
-											}
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.timeStopTimer--;
-										for (int i = 0; i < kMaxEBullets; i++) {
-											if (ebullets[i].active && ebullets[i].waitTimeStop) {
-												ebullets[i].aimX = pcx;
-												ebullets[i].aimY = pcy;
-											}
-										}
-										if (boss.timeStopTimer <= 0) {
-											boss.timeStopTimer = 0;
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (ebullets[i].active && ebullets[i].waitTimeStop) {
-													ebullets[i].waitTimeStop = false;
-													float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
-													ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
-													ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
-												}
-											}
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer >= 40) {
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 9:
-									if (boss.subState == 0) {
-										boss.timeStopTimer = 90;
-										boss.subState = 1;
-										boss.subTimer = 0;
-										shake = 12;
-
-										const float dist = 170.0f;
-										for (int k = 0; k < 8; k++) {
-											float ang = k * (2.0f * kPi / 8.0f);
-											float bx = pcx + cosf(ang) * dist;
-											float by = pcy + sinf(ang) * dist;
-
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (!ebullets[i].active) {
-													ebullets[i].active = true;
-													ebullets[i].x = bx;
-													ebullets[i].y = by;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 0.0f;
-													ebullets[i].r = 10.0f;
-													ebullets[i].wave = false;
-													ebullets[i].reflected = false;
-													ebullets[i].meteor = false;
-													ebullets[i].unparryable = false;
-													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = false;
-													ebullets[i].waitTimeStop = true;
-													ebullets[i].aimX = pcx;
-													ebullets[i].aimY = pcy;
-													ebullets[i].launchSpeed = 10.0f;
-													break;
-												}
-											}
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.timeStopTimer--;
-										for (int i = 0; i < kMaxEBullets; i++) {
-											if (ebullets[i].active && ebullets[i].waitTimeStop) {
-												ebullets[i].aimX = pcx;
-												ebullets[i].aimY = pcy;
-											}
-										}
-										if (boss.timeStopTimer <= 0) {
-											boss.timeStopTimer = 0;
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (ebullets[i].active && ebullets[i].waitTimeStop) {
-													ebullets[i].waitTimeStop = false;
-													float ang = atan2f(ebullets[i].aimY - ebullets[i].y, ebullets[i].aimX - ebullets[i].x);
-													ebullets[i].vx = cosf(ang) * ebullets[i].launchSpeed;
-													ebullets[i].vy = sinf(ang) * ebullets[i].launchSpeed;
-												}
-											}
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer >= 40) {
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-
-								case 10:
-									if (boss.subState == 0) {
-										boss.timeStopTimer = 90;
-										boss.subState = 1;
-										boss.subTimer = 0;
-										shake = 14;
-
-										for (int k = 0; k < 10; k++) {
-											float bx = static_cast<float>(50 + rand() % (kScreenW - 100));
-											float by = static_cast<float>(50 + rand() % 150);
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (!ebullets[i].active) {
-													ebullets[i].active = true;
-													ebullets[i].x = bx;
-													ebullets[i].y = by;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 0.0f;
-													ebullets[i].r = 9.0f;
-													ebullets[i].wave = false;
-													ebullets[i].reflected = false;
-													ebullets[i].meteor = false;
-													ebullets[i].unparryable = false;
-													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = false;
-													ebullets[i].waitTimeStop = true;
-													break;
-												}
-											}
-										}
-										for (int k = 0; k < 20; k++) {
-											float bx = static_cast<float>(30 + rand() % (kScreenW - 60));
-											float by = static_cast<float>(30 + rand() % 200);
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (!ebullets[i].active) {
-													ebullets[i].active = true;
-													ebullets[i].x = bx;
-													ebullets[i].y = by;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 0.0f;
-													ebullets[i].r = 9.0f;
-													ebullets[i].wave = false;
-													ebullets[i].reflected = false;
-													ebullets[i].meteor = false;
-													ebullets[i].unparryable = true;
-													ebullets[i].useGravity = false;
-													ebullets[i].spawnLaserOnLand = true;
-													ebullets[i].waitTimeStop = true;
-													break;
-												}
-											}
-										}
-									}
-									else if (boss.subState == 1) {
-										boss.timeStopTimer--;
-										if (boss.timeStopTimer <= 0) {
-											boss.timeStopTimer = 0;
-											for (int i = 0; i < kMaxEBullets; i++) {
-												if (ebullets[i].active && ebullets[i].waitTimeStop) {
-													ebullets[i].waitTimeStop = false;
-													ebullets[i].vx = 0.0f;
-													ebullets[i].vy = 8.0f;
-												}
-											}
-											boss.subState = 2;
-											boss.subTimer = 0;
-										}
-									}
-									else if (boss.subState == 2) {
-										boss.subTimer++;
-										if (boss.subTimer >= 60) {
-											boss.state = 0;
-											boss.timer = 120;
-										}
-									}
-									break;
-								}
-							}
-						}
-					}
-				}
-				// 登場演出用コウモリの移動更新（introTimerが0になった後も画面外へ出るまで飛び続ける）
-				if (currentStage == 0 && introTimer < 80)
+				else if (player.hp <= 0)
 				{
-					bool anyBatActive = false; //1匹でも飛んでいるかのフラグ
-					for (int i = 0; i < kMaxIntroBats; i++)
-					{
-						if (!introBats[i].active) continue;
-						anyBatActive = true; //まだ飛んでいるコウモリがいる
-						introBats[i].x += introBats[i].vx;
-						introBats[i].y += introBats[i].vy;
-						// 画面外に出たら消す（下方向も念のため追加）
-						if (introBats[i].x < -64.0f || introBats[i].x > kScreenW + 64.0f ||
-							introBats[i].y < -64.0f || introBats[i].y > kScreenH + 64.0f)
-						{
-							introBats[i].active = false;
-						}
-					}
-					// コウモリが飛んでいる間だけ音をループ再生（多重再生防止）
-					if (anyBatActive) {
-						if (!Novice::IsPlayingAudio(batHandle)) {
-							batHandle = Novice::PlayAudio(batSound, true, 2.0f); // 第2引数をtrueにしてループ
-						}
-					}
-					else {
-						// 全てのコウモリが画面外に出たら音を止める
-						if (Novice::IsPlayingAudio(batHandle)) {
-							Novice::StopAudio(batHandle);
-						}
-					}
-					//吹き飛ばしエフェクトのタイマーを減らす
-					if (boss.repelEffectTimer > 0)
-					{
-						boss.repelEffectTimer--;
-					}
-				}
-				boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
-
-				// ==================================================
-				// レーザーの更新と当たり判定
-				// ==================================================
-				if (!isTimeStopped) {
-					for (int i = 0; i < kMaxLasers; i++) {
-						Laser& lz = lasers[i];
-						if (!lz.active) continue;
-
-						if (lz.warnTimer > 0) {
-							lz.warnTimer--;
-							if (lz.warnTimer == 0 && lz.spawnSpread && !lz.spawnedSpread) {
-								lz.spawnedSpread = true;
-								for (int k = 0; k < 16; k++) {
-									float ang = k * (2.0f * kPi / 16.0f);
-									bool isBullet2 = (k % 2 == 1);
-									FireAngle(ebullets, lz.x2, lz.y2, ang, 5.5f, 8.5f, isBullet2);
-								}
-							}
-						}
-						else {
-							if (lz.movingVertical) {
-								lz.x1 += lz.vx;
-								lz.x2 += lz.vx;
-								if (lz.x1 < -50.0f || lz.x1 > kScreenW + 50.0f) {
-									lz.active = false;
-									continue;
-								}
-							}
-							lz.activeTimer--;
-							if (lz.activeTimer <= 0) {
-								lz.active = false;
-								continue;
-							}
-
-							bool canHit = true;
-							if (lz.airPhaseThrough && !player.onGround) {
-								canHit = false;
-							}
-
-							if (canHit && player.invincible == 0 && player.dashTimer == 0) {
-								if (HitLineBox(lz.x1, lz.y1, lz.x2, lz.y2, lz.width * 0.5f, player.x, player.y, player.w, player.h)) {
-									HurtPlayer(player);
-								}
-							}
-						}
-					}
-				}
-
-				// ==================================================
-				// ボスの弾の更新とパリィ・被弾判定
-				// ==================================================
-				if (!isTimeStopped) {
-					for (int i = 0; i < kMaxEBullets; i++) {
-						EBullet& b = ebullets[i];
-						if (!b.active) continue;
-
-						if (b.waitTimeStop) continue;
-
-						if (b.useGravity) {
-							b.vy += kGravity * 0.45f;
-						}
-
-						b.x += b.vx;
-						b.y += b.vy;
-
-						if (b.spawnLaserOnLand && b.y >= groundY) {
-							SpawnLaser(lasers, b.x, 0.0f, b.x, groundY, 26.0f, 30, 15, false);
-							b.active = false;
-							continue;
-						}
-
-						if (b.x < -60.0f || b.x > kScreenW + 60.0f || b.y < -120.0f || b.y > kScreenH + 60.0f) {
-							b.active = false;
-							continue;
-						}
-
-						if (b.reflected) {
-							if (!boss.hidden && HitBox(b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f, boss.x, boss.y, boss.w, boss.h)) {
-								b.active = false;
-								bool wasBroken = boss.isBroken;
-								DamageBossBreak(boss, 150, shake);
-								// ステージ1のエネミーにパリィ弾が当たった時の効果音
-								if (boss.type == 0)
-								{
-									parryHitHandle = Novice::PlayAudio(parryHitSound, false, 1.0f);
-								}
-								//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
-								if (!wasBroken && boss.isBroken && boss.type == 0)
-								{
-									jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 1.0f);
-									// もしチャージ中だったらチャージ音も止める
-									if (Novice::IsPlayingAudio(jesseChargeHandle))
-									{
-										Novice::StopAudio(jesseChargeHandle);
-									}
-								}
-								boss.flash = 10;
-								shake = 8;
-							}
-							continue;
-						}
-
-						if (!b.unparryable && player.parryTimer > 0 && HitBox(player.x - 24.0f, player.y - 24.0f, player.w + 48.0f, player.h + 48.0f, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
-							if (b.wave) {
-								b.active = false;
-							}
-							else {
-								b.reflected = true;
-								b.useGravity = false;
-								float ang = atan2f(bcy - b.y, bcx - b.x);
-								b.vx = cosf(ang) * 14.0f;
-								b.vy = sinf(ang) * 14.0f;
-								b.r = 14.0f;
-							}
-
-							player.parryCooldown = 0;
-							player.invincible = 20;
-							player.parryFlash = 10;
-							// パリィした時のサウンド!!!!!!!!!!!!!!!!!!!
-							parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
-							shake = 6;
-						}
-						else if (player.invincible == 0 && player.dashTimer == 0 &&
-							HitBox(player.x, player.y, player.w, player.h, b.x - b.r, b.y - b.r, b.r * 2.0f, b.r * 2.0f)) {
-							HurtPlayer(player);
-							if (!b.wave) b.active = false;
-						}
-					}
-				}
-
-				if (boss.type == 2) {
-					bool bossRushActive = (boss.state == 1 && (boss.currentPattern == 0 || boss.currentPattern == 1) && boss.subState == 2);
-					if (bossRushActive && !boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
-						if (player.invincible == 0 && player.dashTimer == 0) {
-							HurtPlayer(player);
-						}
-					}
-				}
-				else if (!boss.isBroken && !boss.hidden && HitBox(player.x, player.y, player.w, player.h, boss.x, boss.y, boss.w, boss.h)) {
-					if (player.parryTimer > 0) {
-						boss.state = 4;
-						boss.timer = 70;
-						boss.flash = 8;
-						player.invincible = 30;
-						player.parryCooldown = 0;
-						player.parryFlash = 10;
-						// ボス本体にパリィした時のサウンド!!!!!!!!!!!!!!!!!!!
-						parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
-						player.vy = -9.0f;
-						player.onGround = false;
-						shake = 10;
-					}
-					else if (player.invincible == 0 && player.dashTimer == 0) {
-						HurtPlayer(player);
-					}
-				}
-			}
-
-			if (boss.hp <= 0) {
-				boss.hp = 0;
-				for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
-				for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
-
-				// ステージ1ならやられ演出を開始（ステージ2・3は今まで通り即クリア）
-				if (boss.type == 0) {
-					if (!boss.isDying) {
-						boss.isDying = true;
-						boss.dieTimer = 0;
-						boss.isBroken = false;
-						boss.repelEffectTimer = 0;
-						// トドメを刺された瞬間のプレイヤーがいる方向を向かせる
-						boss.dir = ((player.x + player.w * 0.5f) > (boss.x + boss.w * 0.5f)) ? 1 : -1;
-						CancelAttack(player); //プレイヤーの攻撃状態をリセット
-						shake = 20;
-						// チャージ音やBGMを止める場合
-						if (Novice::IsPlayingAudio(jesseChargeHandle)) {
-							Novice::StopAudio(jesseChargeHandle);
-						}
-					}
-				}
-				else {
-					if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
-						bestFrames[currentStage] = playFrames;
-					}
+					player.hp = 0;
 					shake = 0;
 					gShakeX = 0;
 					gShakeY = 0;
 					isScreenReversex = false;
 					isScreenReversey = false;
 					isReverseAttackUsed = false;
-					scene = kVictory;
+					scene = kGameOver;
 				}
-			}
-			else if (player.hp <= 0) {
-				player.hp = 0;
-				shake = 0;
-				gShakeX = 0;
-				gShakeY = 0;
-				isScreenReversex = false;
-				isScreenReversey = false;
-				isReverseAttackUsed = false;
-				scene = kGameOver;
 			}
 		}
 		//==================================================
@@ -2327,7 +2355,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 
-		if (scene == kPlay) {
+		if (scene == kPlay)
+		{
 			unsigned int bodyColor = 0;
 			if (boss.type == 0) bodyColor = 0x33CC99FF;
 			else if (boss.type == 1) bodyColor = 0xCC4433FF;
@@ -2756,8 +2785,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0x333333FF, kFillModeSolid);
 			Novice::DrawBox(440, 58, breakW, 10, 0.0f, breakColor, kFillModeSolid);
 			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0xCCCCCCFF, kFillModeWireFrame);
-		}
+			// ステージ1 撃破演出（ホワイトフラッシュ ＆ 衝撃波リング）
+			if (boss.type == 0 && boss.isDying) {
+				float bcx = boss.x + boss.w * 0.5f;
+				float bcy = boss.y + boss.h * 0.5f;
 
+				// ホワイトフラッシュ
+				if (hitStopTimer > 0) {
+					unsigned int flashAlpha = static_cast<unsigned int>((hitStopTimer / 15.0f) * 210.0f);
+					Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0xFFFFFF00 | flashAlpha, kFillModeSolid);
+				}
+
+				// 衝撃波リング（二重）
+				if (hitStopTimer == 0 && boss.dieTimer < 45) {
+					float progress = boss.dieTimer / 45.0f;
+					unsigned int ringAlpha = static_cast<unsigned int>((1.0f - progress) * 200.0f);
+					Circle(bcx, bcy, boss.dieTimer * 18.0f, 0xFF448800 | ringAlpha);
+
+					if (boss.dieTimer < 25) {
+						float innerProgress = boss.dieTimer / 25.0f;
+						unsigned int innerAlpha = static_cast<unsigned int>((1.0f - innerProgress) * 220.0f);
+						Circle(bcx, bcy, boss.dieTimer * 12.0f, 0xFFFFFF00 | innerAlpha);
+					}
+				}
+			}
+		}
 		if (scene == kTitle) {
 			PrintfCenter(640, 150, "=== BOSS BATTLE ===");
 			if ((frame / 30) % 2 == 0) {
@@ -2767,7 +2819,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		else if (scene == kStageSelect) {
 			PrintfCenter(640, 80, "=== STAGE SELECT ===");
 			const char* stageNames[kTotalStages] = { "STAGE 1", "STAGE 2", "STAGE 3" };
-			const char* bossTypes[kTotalStages] = { "Sniper Type", "Crusher Type", "Wizard Type" };
+			const char* bossTypes[kTotalStages] = { "Jesse", "Crusher Type", "Wizard Type" };
 			const int boxW = 180;
 			const int boxH = 210;
 			const int boxGap = 20;
