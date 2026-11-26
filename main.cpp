@@ -682,11 +682,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//=================================================
 	// BGM
 	// =================================================
+	int titleBgmSound = Novice::LoadAudio("./Resources/bgm/title.WAV");
+	int stageSelectBgmSound = Novice::LoadAudio("./Resources/bgm/stageSelect.WAV");
 	int jesseBgmSound = Novice::LoadAudio("./Resources/bgm/stage1.MP3");
+
 	int jesseBgmHandle = -1;
+	int stageSelectBgmHandle = -1;
+	int titleBgmHandle = -1;
 	//=================================================
 	// 効果音
 	// =================================================
+	//プレイヤー
 	int lightSound = Novice::LoadAudio("./Resources/sound/lightSound.MP3");
 	int heavySound = Novice::LoadAudio("./Resources/sound/heavySound.MP3");
 	int parrySound = Novice::LoadAudio("./Resources/sound/parrySound.MP3");
@@ -695,6 +701,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int heavyHandle = -1;
 	int parryHandle = -1;
 
+	//システム
+	int confirmationSound = Novice::LoadAudio("./Resources/sound/Confirmation.MP3");
+	int cursorMovementSound = Novice::LoadAudio("./Resources/sound/cursorMovement.MP3");
+
+	int confirmationHandle = -1;
+	int cursorMovementHandle = -1;
+
+	//ステージ１のエネミー
 	int jesseToTakeastnceSound = Novice::LoadAudio("./Resources/sound/Totakeastance.MP3");
 	int jesseshotSound = Novice::LoadAudio("./Resources/sound/shot.MP3");
 	int jesseBreakSound = Novice::LoadAudio("./Resources/sound/break.MP3");
@@ -773,18 +787,43 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
 		if (scene == kTitle) {
+			// タイトルBGM再生（未再生ならループ再生）
+			if (!Novice::IsPlayingAudio(titleBgmHandle)) {
+				titleBgmHandle = Novice::PlayAudio(titleBgmSound, true, 0.5f);
+			}
+			// 他シーンのBGMが鳴っていたら止める
+			if (Novice::IsPlayingAudio(stageSelectBgmHandle)) {
+				Novice::StopAudio(stageSelectBgmHandle);
+			}
+
 			if (pressStart) {
+				confirmationHandle = Novice::PlayAudio(confirmationSound, false, 0.8f);
+				if (Novice::IsPlayingAudio(titleBgmHandle)) {
+					Novice::StopAudio(titleBgmHandle);
+				}
 				scene = kStageSelect;
 			}
 		}
 		else if (scene == kStageSelect) {
+			// ステージセレクトBGM再生（未再生ならループ再生）
+			if (!Novice::IsPlayingAudio(stageSelectBgmHandle)) {
+				stageSelectBgmHandle = Novice::PlayAudio(stageSelectBgmSound, true, 0.5f);
+			}
+
 			if ((preKeys[DIK_A] == 0 && keys[DIK_A] != 0) || (preKeys[DIK_LEFT] == 0 && keys[DIK_LEFT] != 0)) {
 				selectedStage = (selectedStage - 1 + kTotalStages) % kTotalStages;
+				cursorMovementHandle = Novice::PlayAudio(cursorMovementSound, false, 0.8f);
 			}
 			if ((preKeys[DIK_D] == 0 && keys[DIK_D] != 0) || (preKeys[DIK_RIGHT] == 0 && keys[DIK_RIGHT] != 0)) {
 				selectedStage = (selectedStage + 1) % kTotalStages;
+				cursorMovementHandle = Novice::PlayAudio(cursorMovementSound, false, 0.8f);
 			}
 			if (pressStart) {
+				confirmationHandle = Novice::PlayAudio(confirmationSound, false, 0.8f);
+				// セレクトBGMを停止してプレイ画面へ
+				if (Novice::IsPlayingAudio(stageSelectBgmHandle)) {
+					Novice::StopAudio(stageSelectBgmHandle);
+				}
 				if (Novice::IsPlayingAudio(jesseBgmHandle))
 				{
 					Novice::StopAudio(jesseBgmHandle);
@@ -809,6 +848,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kPlay;
 			}
 			if (preKeys[DIK_BACKSPACE] == 0 && keys[DIK_BACKSPACE] != 0) {
+				cursorMovementHandle = Novice::PlayAudio(cursorMovementSound, false, 1.0f);
+				// セレクトBGMを停止してタイトルへ戻る
+				if (Novice::IsPlayingAudio(stageSelectBgmHandle)) {
+					Novice::StopAudio(stageSelectBgmHandle);
+				}
 				scene = kTitle;
 			}
 		}
@@ -822,6 +866,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			gShakeX = 0;
 			gShakeY = 0;
 			if (pressStart) {
+				//決定したときの音
+				confirmationHandle = Novice::PlayAudio(confirmationSound, false, 1.0f);
 				scene = kStageSelect;
 			}
 		}
@@ -2709,7 +2755,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				unsigned int shadowColor = isSelected ? 0xFFFFFF99 : 0xFFFFFF44;
 				if (i == 0) {
 					// ステージ1のキャラを四角の中央付近に描画
-					float scale = 2.0f; // 例：64x96 の画像なら 128x192 になる
+					float scale = 2.0f; 
 					int imgW = static_cast<int>(64 * scale);
 					int imgH = static_cast<int>(96 * scale);
 					int drawX = centerX - imgW / 2;
