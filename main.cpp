@@ -213,25 +213,6 @@ static void PrintfCenter(int centerX, int y, const char* format, ...) {
 	va_end(args);
 	GetFont().Draw(centerX - GetFont().Width(buf) / 2, y, buf);
 }
-////ステージ２ 画面反転用の関数
-//bool isScreenReversex = false;
-//bool isScreenReversey = false;
-//bool isReverseAttackUsed = false;
-/////ステージ２　反転させるためのあれ
-//		// X座標を反転
-//float ReverseX(float x, float w = 0.0f) {
-//	if (isScreenReversex) {
-//		return kScreenW - x - w;
-//	}
-//	return x;
-//}
-//// Y座標を反転
-//float ReverseY(float y, float h = 0.0f) {
-//	if (isScreenReversey) {
-//		return kScreenH - y - h;
-//	}
-//	return y;
-//}
 
 // ==================================================
 // 共通関数
@@ -442,10 +423,8 @@ static void SpawnIntroBats(IntroBat* bats, const Boss& boss)
 	float bcy = boss.y + boss.h * 0.5f;
 	for (int i = 0; i < kMaxIntroBats; i++) {
 		bats[i].active = true;
-		// ボス（64x96）の全身を隙間なく覆う範囲に密集配置
 		bats[i].x = bcx + static_cast<float>((rand() % 71) - 35);
 		bats[i].y = bcy + static_cast<float>((rand() % 101) - 50);
-		// 上方向〜左右に散らばるように飛ぶ速度を設定
 		float ang = -kPi * 0.5f + static_cast<float>((rand() % 160) - 80) * (kPi / 180.0f);
 		float spd = 5.0f + static_cast<float>(rand() % 7);
 		bats[i].vx = cosf(ang) * spd;
@@ -468,11 +447,13 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	isScreenReversex = false;
 	isScreenReversey = false;
 	isReverseAttackUsed = false;
+
+	// プレイヤーの当たり判定を 36 * 72 に設定
+	pl.w = 36.0f;
+	pl.h = 72.0f;
 	pl.x = 200.0f;
-	pl.y = groundY - 48.0f;
+	pl.y = groundY - pl.h;
 	pl.vx = pl.vy = 0.0f;
-	pl.w = 32.0f;
-	pl.h = 48.0f;
 	pl.onGround = true;
 	pl.dir = 1;
 	pl.hp = kPlayerMaxHp;
@@ -493,7 +474,6 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	pl.atkDmg = 0;
 	pl.comboWindow = 0;
 	pl.airComboLeft = 1;
-	//ステージ１のエネミーの吹き飛ばし用の変数を初期化
 	pl.knockbackTimer = 0;
 	pl.knockbackVx = 0.0f;
 
@@ -504,7 +484,7 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 		boss.w = 48.0f;
 		boss.h = 76.0f;
 	}
-	else if (stage == 0) { //ステージ1用のボスのサイズを設定
+	else if (stage == 0) {
 		boss.w = 64.0f;
 		boss.h = 96.0f;
 	}
@@ -546,7 +526,6 @@ static void ResetGame(Player& pl, EBullet* ebullets, Laser* lasers, Boss& boss, 
 	boss.repeatCount = 0;
 	boss.timeStopTimer = 0;
 	boss.timeStopPrepTimer = 0;
-	//ステージ１のボス用変数を初期化
 	boss.flash = 0;
 	boss.hitCount = 0;
 	boss.repelEffectTimer = 0;
@@ -661,6 +640,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//==================================================
 	// 画像読み込み
 	//==================================================
+	// プレイヤーの左右向きスプライトシート（1コマ 128x92 × 6枚）
+	int rightPlayerSheetTexture = Novice::LoadTexture("./Resources/images/td1_2_right_player-Sheet.png");
+	int leftPlayerSheetTexture = Novice::LoadTexture("./Resources/images/td1_2_left_player-Sheet.png");
+	const int kPlayerFrameWidth = 128;
+	const int kPlayerFrameHeight = 92;
+	const int kPlayerWalkFrameCount = 4; // 1〜4枚目（index 0〜3）を歩行ループ
+	const int kPlayerAnimSpeed = 8;
+	int playerWalkAnimFrame = 0;
+	int playerWalkAnimTimer = 0;
+
 	//メテオ用変数と画像
 	int meteorTexture = Novice::LoadTexture("./Resources/images/meteor.png");
 	int rareMeteorTexture = Novice::LoadTexture("./Resources/images/rareMeteor.png");
@@ -673,75 +662,47 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//==================================================
 	//ステージ１のエネミー
 	//==================================================
-	//攻撃のテクスチャ
 	int jesseConsecutiveAttacksLeftTexture = Novice::LoadTexture("./Resources/images/jesseConsecutive attacksLeft.png");
 	int jesseConsecutiveattacksRightTexture = Novice::LoadTexture("./Resources/images/jesseConsecutive attacksRight.png");
-	//歩くテクスチャ
 	int jesseWalkLeftTexture = Novice::LoadTexture("./Resources/images/jesseWalkLeft.png");
 	int jesseWalkRightTexture = Novice::LoadTexture("./Resources/images/jesseWalkRight.png");
-	//チャージ攻撃のテクスチャ
 	int jesseChargeAttackLeftTexture = Novice::LoadTexture("./Resources/images/jesseChargeAttackLeft.png");
 	int jesseChargeAttackRightTexture = Novice::LoadTexture("./Resources/images/jesseChargeAttackRight.png");
-	//ブレイクのテクスチャ
 	int jesseBreakLeftTexture = Novice::LoadTexture("./Resources/images/jesseBreakLeft.png");
 	int jesseBreakRightTexture = Novice::LoadTexture("./Resources/images/jesseBreakRight.png");
-	//吹き飛ばしのテクスチャ
 	int jesseblowoffLeftTexture = Novice::LoadTexture("./Resources/images/jesseblowoffLeft.png");
 	int jesseblowoffRightTexture = Novice::LoadTexture("./Resources/images/jesseblowoffRight.png");
-	//やられた時のテクスチャ
 	int jessegottakendownLeftTexture = Novice::LoadTexture("./Resources/images/jessegottakendownLeft.png");
 	int jessegottakendownRightTexture = Novice::LoadTexture("./Resources/images/jessegottakendownRight.png");
-	//足場のテクスチャ
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
-	//背景のテクスチャ
 	int backGroundTexture = Novice::LoadTexture("./Resources/images/background.png");
-	//背景の地面テクスチャ
 	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
-	//コウモリのテクスチャ
 	int batTexture = Novice::LoadTexture("./Resources/images/bat.png");
 	//=================================================
 	// BGM
 	// =================================================
-	//ステージ１のBGM
 	int jesseBgmSound = Novice::LoadAudio("./Resources/bgm/stage1.MP3");
 	int jesseBgmHandle = -1;
 	//=================================================
 	// 効果音
 	// =================================================
-
-	//=================================================
-	//プレイヤーの効果音
-	//=================================================
-	//ブレイクしていないときの通常攻撃の効果音
 	int lightSound = Novice::LoadAudio("./Resources/sound/lightSound.MP3");
-	//ブレイクしているときの通常攻撃の効果音
 	int heavySound = Novice::LoadAudio("./Resources/sound/heavySound.MP3");
-	//パリィした時の効果音
 	int parrySound = Novice::LoadAudio("./Resources/sound/parrySound.MP3");
 
 	int lightHandle = -1;
 	int heavyHandle = -1;
 	int parryHandle = -1;
-	//=================================================
-	//ステージ１の効果音
-	//=================================================
+
 	int jesseToTakeastnceSound = Novice::LoadAudio("./Resources/sound/Totakeastance.MP3");
 	int jesseshotSound = Novice::LoadAudio("./Resources/sound/shot.MP3");
-	//ブレイクの効果音
 	int jesseBreakSound = Novice::LoadAudio("./Resources/sound/break.MP3");
-	//吹き飛ばしの効果音
 	int jesseBlowoffSound = Novice::LoadAudio("./Resources/sound/blowoff.MP3");
-	//メテオの効果音
 	int jesseMeteorSound = Novice::LoadAudio("./Resources/sound/meteor.MP3");
-	//チャージ中の効果音
 	int jesseChargeSound = Novice::LoadAudio("./Resources/sound/meteorCharge.MP3");
-	//コウモリの効果音
 	int batSound = Novice::LoadAudio("./Resources/sound/bat.MP3");
-	//パリィされた攻撃に当たった時の効果音
 	int parryHitSound = Novice::LoadAudio("./Resources/sound/parryHit.MP3");
-	//撃墜の効果音
 	int jesseShootDownSound = Novice::LoadAudio("./Resources/sound/jesseShootDown.MP3");
-	//倒したアニメーションの効果音
 	int jesseDownSound = Novice::LoadAudio("./Resources/sound/jesseDown.MP3");
 
 	int jesseToTakeastnceHandle = -1;
@@ -810,13 +771,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		int activePlatformNum = (currentStage == 2) ? 1 : kPlatformNum;
 
 		bool pressStart = (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0) || (preKeys[DIK_RETURN] == 0 && keys[DIK_RETURN] != 0);
-		// タイトル画面の処理
 		if (scene == kTitle) {
 			if (pressStart) {
 				scene = kStageSelect;
 			}
 		}
-		// ステージ選択画面の処理
 		else if (scene == kStageSelect) {
 			if ((preKeys[DIK_A] == 0 && keys[DIK_A] != 0) || (preKeys[DIK_LEFT] == 0 && keys[DIK_LEFT] != 0)) {
 				selectedStage = (selectedStage - 1 + kTotalStages) % kTotalStages;
@@ -825,7 +784,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				selectedStage = (selectedStage + 1) % kTotalStages;
 			}
 			if (pressStart) {
-				// 前のBGMが鳴っていたら止める
 				if (Novice::IsPlayingAudio(jesseBgmHandle))
 				{
 					Novice::StopAudio(jesseBgmHandle);
@@ -834,7 +792,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ResetGame(player, ebullets, lasers, boss, groundY, currentStage);
 				for (int i = 0; i < kMaxDamagePopups; i++) popups[i].timer = 0;
 				introTimer = kIntroFrames;
-				// ステージ1のエネミーの登場演出用コウモリを生成
 				if (currentStage == 0)
 				{
 					SpawnIntroBats(introBats, boss);
@@ -854,12 +811,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				scene = kTitle;
 			}
 		}
-		// ゲームオーバー・クリア画面の処理
 		else if (scene == kGameOver || scene == kVictory)
 		{
 			if (Novice::IsPlayingAudio(jesseBgmHandle))
 			{
-				// 前のBGMが鳴っていたら止める
 				Novice::StopAudio(jesseBgmHandle);
 			}
 			shake = 0;
@@ -870,7 +825,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 		else if (scene == kPlay) {
-			// ヒットストップ中はゲームの進行を止める
 			if (hitStopTimer > 0)
 			{
 				hitStopTimer--;
@@ -902,27 +856,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							player.dir = -1;
 						}
 					}
-
-					/*		bool isrevarscontlol = (boss.type == 1);
-							if (isReverseAttackUsed= true)
-							{
-								if (keys[DIK_A]) {
-									player.vx = kMoveSpeed;
-									player.dir = 1;
-								}
-								if (keys[DIK_D]) {
-									player.vx = -kMoveSpeed;
-									player.dir = -1;
-								}
-
-
-							}*/
-
-
-
-							//=====================///
-							///プレイヤー操作（共通)///
-							//=====================///
 
 					bool jumpTrigger = (preKeys[DIK_W] == 0 && keys[DIK_W] != 0) || (preKeys[DIK_SPACE] == 0 && keys[DIK_SPACE] != 0);
 					bool jumpHeld = keys[DIK_W] != 0 || keys[DIK_SPACE] != 0;
@@ -1035,9 +968,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 					bool dashing = player.dashTimer > 0;
 					if (player.knockbackTimer > 0) {
-						// 吹き飛ばされ中の処理
 						player.vx = player.knockbackVx;
-						player.knockbackVx *= 0.92f; // 徐々に減速
+						player.knockbackVx *= 0.92f;
 						player.knockbackTimer--;
 					}
 					else if (dashing) {
@@ -1086,59 +1018,45 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					if (introTimer == 0 && !boss.hidden && !boss.isDying && !player.atkHit && HitBox(ax, ay, aw, ah, boss.x, boss.y, boss.w, boss.h)) {
 						bool finisher = (!player.atkAir && player.atkStep == 8) || (player.atkAir && player.atkStep == 4);
 						player.atkHit = true;
-						//==========================================
-						// ブレイク処理
-						// =========================================
-						// ステージ1でブレイクしていない時はダメージがほとんど通らない
 						int dmg = player.atkDmg;
 						if (boss.isBroken)
 						{
 							dmg = static_cast<int>(player.atkDmg * 1.5f);
-							//ブレイク中の攻撃ヒット音
 							heavyHandle = Novice::PlayAudio(heavySound, false, 0.7f);
 						}
 						else if (boss.type == 0)
 						{
-							//全く入らない（0）にしたい場合は dmg = 0; にする
 							dmg = player.atkDmg / 10;
-							//ブレイクしていない時の攻撃ヒット音（弾かれる音）
 							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
 						}
 						else if (boss.type == 2) {
 							dmg = player.atkDmg / 3;
-							//ステージ3でブレイクしていない時も鳴らす場合
 							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
 						}
 						else {
-							//ステージ2でブレイクしていない時の音
 							lightHandle = Novice::PlayAudio(lightSound, false, 0.7f);
 						}
 						boss.hp -= dmg;
 						SpawnDamagePopup(popups, boss, dmg, boss.isBroken);
 
-						// ステージ1でブレイク中でなければヒット数をカウント
 						if (boss.type == 0 && !boss.isBroken) {
 							boss.hitCount++;
 							if (boss.hitCount >= 10) {
-								boss.hitCount = 0; // カウントリセット
-								CancelAttack(player); //プレイヤーの攻撃を中断
+								boss.hitCount = 0;
+								CancelAttack(player);
 
-								// ボスから離れる方向を計算して吹き飛ばす
 								float pushDir = (player.x + player.w * 0.5f < boss.x + boss.w * 0.5f) ? -1.0f : 1.0f;
 								player.knockbackTimer = 25;
-								player.knockbackVx = pushDir * 80.0f; // 横に大きく吹っ飛ぶ速度
+								player.knockbackVx = pushDir * 80.0f;
 								player.vy = -12.0f;
 								player.onGround = false;
-								player.invincible = 45;//短い無敵
-								shake = 16;// 画面を揺らす
-								// 吹き飛ばしエフェクト
-								boss.repelEffectTimer = 25; // ノックバックと同じ期間表示
-								boss.repelEffectX = boss.x + boss.w * 0.5f; // ボスの中心から
+								player.invincible = 45;
+								shake = 16;
+								boss.repelEffectTimer = 25;
+								boss.repelEffectX = boss.x + boss.w * 0.5f;
 								boss.repelEffectY = boss.y + boss.h * 0.5f;
-								// 吹き飛ばしアニメーションを最初のコマから再生
 								jesseAnimFrame = 0;
 								jesseAnimTimer = 0;
-								// 吹き飛ばしの音を再生
 								jesseBlowoffHandle = Novice::PlayAudio(jesseBlowoffSound, false, 0.7f);
 							}
 						}
@@ -1147,7 +1065,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						shake = finisher ? 16 : 6;
 						if (player.invincible < 15) player.invincible = 15;
 
-						//ブレイク中ノックバックしない
 						if (boss.type != 2 && !(boss.type == 0 && boss.isBroken))
 						{
 							float knock = finisher ? 60.0f : (!player.atkAir ? 20.0f : 6.0f);
@@ -1166,7 +1083,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (introTimer > 0)
 				{
 					introTimer--;
-					// コウモリが飛び始めた瞬間にBGMをループ再生
 					if (currentStage == 0 && introTimer == 80) {
 						if (!Novice::IsPlayingAudio(jesseBgmHandle)) {
 							jesseBgmHandle = Novice::PlayAudio(jesseBgmSound, true, 0.5f);
@@ -1184,12 +1100,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					if (boss.isDying) {
 						Novice::StopAudio(jesseBgmHandle);
 						boss.dieTimer++;
-						if (boss.dieTimer == 1) 
+						if (boss.dieTimer == 1)
 						{
-							//やられ効果音
 							jesseDownHandle = Novice::PlayAudio(jesseDownSound, false, 1.0f);
 						}
-						// もし空中でトドメを刺した場合は地面まで落とす
 						if (boss.y + boss.h < groundY) {
 							boss.vy += kGravity;
 							boss.y += boss.vy;
@@ -1198,7 +1112,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								boss.vy = 0.0f;
 							}
 						}
-						// 倒した後のアニメーション再生時間
 						if (boss.dieTimer >= 120) {
 							if (bestFrames[currentStage] == 0 || playFrames < bestFrames[currentStage]) {
 								bestFrames[currentStage] = playFrames;
@@ -1234,9 +1147,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 					else {
 						if (boss.type == 0) {
-							// ==========================================
-							// ステージ1 スナイパー型 ボスAI
-							// ==========================================
 							if (boss.muzzleFlashTimer > 0) boss.muzzleFlashTimer--;
 							switch (boss.state) {
 							case 0:
@@ -1249,57 +1159,49 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 										boss.state = 1;
 										boss.timer = 70;
 										boss.aimAngle = aim;
-										// 構えた時の音を再生
 										jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
 									}
 									else if (pick == 1) {
 										boss.state = 2;
 										boss.timer = 70;
 										boss.aimAngle = aim;
-										// 構えた時の音を再生
 										jesseToTakeastnceHandle = Novice::PlayAudio(jesseToTakeastnceSound, false, 0.8f);
 									}
 									else {
 										boss.state = 3;
 										boss.timer = 100;
 										boss.isRareMeteor = (rand() % 7 == 0);
-										// チャージ中の音を再生
 										jesseChargeHandle = Novice::PlayAudio(jesseChargeSound, false, 0.7f);
 									}
 								}
 								break;
 							case 1:
-								// 連射攻撃
 								boss.dir = (pcx > bcx) ? 1 : -1;
 								if (boss.timer > 45) {
-									// プレイヤーを追尾して狙う
 									boss.aimAngle = aim;
 								}
 								else if (boss.timer > 0 && boss.timer % 15 == 0) {
 									boss.aimAngle = aim;
 									FireAngle(ebullets, bcx, bcy - 20.0f, boss.aimAngle, 9.0f, 8.0f);
-									// 発射音を再生
 									jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
-									boss.x -= boss.dir * 8.0f; // 発射の反動で後ろに下がる
-									boss.muzzleFlashTimer = 6; // マズルフラッシュ点灯
+									boss.x -= boss.dir * 8.0f;
+									boss.muzzleFlashTimer = 6;
 								}
 								boss.timer--;
 								if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
 								break;
 							case 2:
-								// 3弾
 								boss.dir = (pcx > bcx) ? 1 : -1;
 								if (boss.timer > 35) {
 									boss.aimAngle = aim;
 								}
 								else if (boss.timer == 35)
 								{
-									// 発射音を再生
 									jesseshotHandle = Novice::PlayAudio(jesseshotSound, false, 0.7f);
 									for (int i = -1; i <= 1; i++) {
 										FireAngle(ebullets, bcx, bcy - 10.0f, boss.aimAngle + i * 0.2f, 7.0f, 10.0f);
 									}
-									boss.x -= boss.dir * 14.0f; // 3弾は少し大きめの反動
+									boss.x -= boss.dir * 14.0f;
 									boss.muzzleFlashTimer = 8;
 								}
 								boss.timer--;
@@ -1307,18 +1209,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								break;
 							case 3:
 								boss.dir = (pcx > bcx) ? 1 : -1;
-								// チャージ中
-								// メテオが降り始める瞬間にチャージ音を止める
 								if (boss.timer == 40)
 								{
 									if (Novice::IsPlayingAudio(jesseChargeHandle))
 									{
 										Novice::StopAudio(jesseChargeHandle);
 									}
-									// メテオの音を再生
 									jesseMeteorHandle = Novice::PlayAudio(jesseMeteorSound, false, 1.5f);
 								}
-								// メテオ降下中は少し移動
 								if (boss.timer <= 40) {
 									boss.x += boss.dir * 1.5f;
 								}
@@ -1327,7 +1225,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									float startX = static_cast<float>(rand() % kScreenW);
 									float targetX = static_cast<float>(rand() % kScreenW);
 									float meteorVx = (targetX - startX) / 55.0f;
-									// 今回のメテオ攻撃がレアなら全部レアメテオになる
 									FireEBullet(ebullets, startX, -40.0f, meteorVx, 10.0f, 15.0f, false, true, false, false, false, boss.isRareMeteor);
 								}
 								if (boss.timer <= 0) { boss.state = 0; boss.timer = 70; }
@@ -1338,15 +1235,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								break;
 							}
 						}
-
-						////ステージ２
 						else if (boss.type == 1) {
 							switch (boss.state) {
 							case 0:
-
 								if (boss.timer <= 0) {
 									int pick = rand() % 4;
-
 									if (pick == 0) {
 										boss.state = 2;
 										boss.timer = 25;
@@ -1359,15 +1252,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 										boss.state = 6;
 										boss.timer = 60;
 									}
-									//break;
 								}
-
 							case 1:
 								boss.dir = (pcx > bcx) ? 1 : -1;
 								boss.x += boss.dir * 2.5f;
 								boss.timer--;
 								if (boss.timer <= 0) {
-									boss.state = (rand() % 6 == 0) ? 5 : 6;//ここで	ランダムに攻撃を決めてるんだねぇ
+									boss.state = (rand() % 6 == 0) ? 5 : 6;
 									if (boss.state == 1) { boss.timer = 30; boss.dir = (pcx > bcx) ? 1 : -1; }
 									else { boss.timer = 25; }
 								}
@@ -1407,41 +1298,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								break;
 							case 6:
 								PrintfCenter(640, 200, "REVERSE ATTACK!!");
-								// 画面反転攻撃
 								if (!isReverseAttackUsed) {
 									isScreenReversex = !isScreenReversex;
 									isScreenReversey = !isScreenReversey;
-
 									isReverseAttackUsed = true;
 								}
 								boss.timer--;
 								if (boss.timer <= 0) {
 									boss.state = 0;
 									boss.timer = 90;
-									// 次の反転攻撃に備える
 									isReverseAttackUsed = false;
 								}
 								break;
 							}
 						}
-						////反転攻撃が来た場合の移動処理（ステージ２のみ使用）
-						//if (isReverseAttackUsed = true) {
-						//	if (keys[DIK_A]) {
-						//		player.vx = kMoveSpeed;
-						//		player.dir = 1;
-						//	}
-						//	if (keys[DIK_D]) {
-						//		player.vx = -kMoveSpeed;
-						//		player.dir = -1;
-						//	}
-						//}
-
-
-
 						else {
-							// ==========================================
-							// ステージ3 ウィザード型 ボスAI
-							// ==========================================
 							if (boss.phase == 1 && boss.hp < static_cast<int>(boss.maxHp * 0.6f)) {
 								boss.phase = 2;
 								boss.hidden = false;
@@ -2021,36 +1892,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							}
 						}
 					}
-					// 登場演出用コウモリの移動更新（introTimerが0になった後も画面外へ出るまで飛び続ける）
 					if (currentStage == 0 && introTimer < 80)
 					{
-						bool anyBatActive = false; //1匹でも飛んでいるかのフラグ
+						bool anyBatActive = false;
 						for (int i = 0; i < kMaxIntroBats; i++)
 						{
 							if (!introBats[i].active) continue;
-							anyBatActive = true; 
+							anyBatActive = true;
 							introBats[i].x += introBats[i].vx;
 							introBats[i].y += introBats[i].vy;
-							// 画面外に出たら消す
 							if (introBats[i].x < -64.0f || introBats[i].x > kScreenW + 64.0f ||
 								introBats[i].y < -64.0f || introBats[i].y > kScreenH + 64.0f)
 							{
 								introBats[i].active = false;
 							}
 						}
-						// コウモリが飛んでいる間だけ音をループ再生（多重再生防止）
 						if (anyBatActive) {
 							if (!Novice::IsPlayingAudio(batHandle)) {
-								batHandle = Novice::PlayAudio(batSound, true, 2.0f); // 第2引数をtrueにしてループ
+								batHandle = Novice::PlayAudio(batSound, true, 2.0f);
 							}
 						}
 						else {
-							// 全てのコウモリが画面外に出たら音を止める
 							if (Novice::IsPlayingAudio(batHandle)) {
 								Novice::StopAudio(batHandle);
 							}
 						}
-						//吹き飛ばしエフェクトのタイマーを減らす
 						if (boss.repelEffectTimer > 0)
 						{
 							boss.repelEffectTimer--;
@@ -2058,9 +1924,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 					boss.x = Clamp(boss.x, 0.0f, kScreenW - boss.w);
 
-					// ==================================================
-					// レーザーの更新と当たり判定
-					// ==================================================
 					if (!isTimeStopped) {
 						for (int i = 0; i < kMaxLasers; i++) {
 							Laser& lz = lasers[i];
@@ -2106,9 +1969,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						}
 					}
 
-					// ==================================================
-					// ボスの弾の更新とパリィ・被弾判定
-					// ==================================================
 					if (!isTimeStopped) {
 						for (int i = 0; i < kMaxEBullets; i++) {
 							EBullet& b = ebullets[i];
@@ -2139,16 +1999,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 									b.active = false;
 									bool wasBroken = boss.isBroken;
 									DamageBossBreak(boss, 150, shake);
-									// ステージ1のエネミーにパリィ弾が当たった時の効果音
 									if (boss.type == 0)
 									{
 										parryHitHandle = Novice::PlayAudio(parryHitSound, false, 1.0f);
 									}
-									//ステージ１のエネミーがブレイクした瞬間なら音を鳴らす
 									if (!wasBroken && boss.isBroken && boss.type == 0)
 									{
 										jesseBreakHandle = Novice::PlayAudio(jesseBreakSound, false, 1.0f);
-										// もしチャージ中だったらチャージ音も止める
 										if (Novice::IsPlayingAudio(jesseChargeHandle))
 										{
 											Novice::StopAudio(jesseChargeHandle);
@@ -2176,7 +2033,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 								player.parryCooldown = 0;
 								player.invincible = 20;
 								player.parryFlash = 10;
-								// パリィした時のサウンド!!!!!!!!!!!!!!!!!!!
 								parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
 								shake = 6;
 							}
@@ -2204,7 +2060,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 							player.invincible = 30;
 							player.parryCooldown = 0;
 							player.parryFlash = 10;
-							// ボス本体にパリィした時のサウンド!!!!!!!!!!!!!!!!!!!
 							parryHandle = Novice::PlayAudio(parrySound, false, 0.8f);
 							player.vy = -9.0f;
 							player.onGround = false;
@@ -2221,21 +2076,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					for (int i = 0; i < kMaxEBullets; i++) ebullets[i].active = false;
 					for (int i = 0; i < kMaxLasers; i++) lasers[i].active = false;
 
-					// ステージ1ならやられ演出を開始（ステージ2・3は今まで通り即クリア）
 					if (boss.type == 0) {
 						if (!boss.isDying) {
 							boss.isDying = true;
 							boss.dieTimer = 0;
 							boss.isBroken = false;
 							boss.repelEffectTimer = 0;
-							// トドメを刺された瞬間のプレイヤーがいる方向を向かせる
 							boss.dir = ((player.x + player.w * 0.5f) > (boss.x + boss.w * 0.5f)) ? 1 : -1;
-							CancelAttack(player); //プレイヤーの攻撃状態をリセット
+							CancelAttack(player);
 							shake = 25;
 							hitStopTimer = 15;
-							// 撃墜の音を再生
 							jesseShootDownHandle = Novice::PlayAudio(jesseShootDownSound, false, 1.0f);
-							// チャージ音やBGMを止める場合
 							if (Novice::IsPlayingAudio(jesseChargeHandle)) {
 								Novice::StopAudio(jesseChargeHandle);
 							}
@@ -2270,28 +2121,37 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//==================================================
 		//アニメーション更新
 		//==================================================
+		// プレイヤー歩行アニメーション（1〜4枚目：index 0〜3 のループ）
+		if (scene == kPlay && player.onGround && fabsf(player.vx) > 0.1f && player.atkTimer == 0) {
+			playerWalkAnimTimer++;
+			if (playerWalkAnimTimer >= kPlayerAnimSpeed) {
+				playerWalkAnimTimer = 0;
+				playerWalkAnimFrame = (playerWalkAnimFrame + 1) % kPlayerWalkFrameCount;
+			}
+		}
+		else {
+			playerWalkAnimFrame = 0;
+			playerWalkAnimTimer = 0;
+		}
+
 		meteorAnimationTimer++;
 		if (meteorAnimationTimer >= kMeteorAnimationSpeed) {
 			meteorAnimationTimer = 0;
 			meteorAnimationFrame++;
 			if (meteorAnimationFrame >= 4) meteorAnimationFrame = 0;
 		}
-		//ステージ1ボスのアニメーション更新
 		jesseAnimTimer++;
 		if (jesseAnimTimer >= kJesseAnimSpeed) {
 			jesseAnimTimer = 0;
 			jesseAnimFrame = (jesseAnimFrame + 1) % kJesseFrameCount;
 		}
-		// コウモリのアニメーション更新
 		batAnimTimer++;
 		if (batAnimTimer >= kBatAnimSpeed) {
 			batAnimTimer = 0;
 			batAnimFrame = (batAnimFrame + 1) % kBatFrameCount;
 		}
 		//==================================================
-		//==================================================
 		//描画処理
-		//==================================================
 		//==================================================
 		if (shake > 0) {
 			gShakeX = (rand() % 11) - 5;
@@ -2304,7 +2164,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0x1B1F3BFF, kFillModeSolid);
 
 		if ((scene == kPlay || scene == kGameOver || scene == kVictory) && currentStage == 0) {
-			// ステージ1の背景画像
 			Novice::DrawSprite(
 				gShakeX,
 				gShakeY,
@@ -2323,7 +2182,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			float h = (i == 0) ? (kScreenH - platforms[i].y) : 20.0f;
 
 			if (currentStage == 0 && i == 0) {
-				// ステージ1の地面テクスチャ描画（1280x80想定）
 				Novice::DrawSprite(
 					static_cast<int>(platforms[i].x) + gShakeX,
 					static_cast<int>(platforms[i].y) + gShakeY,
@@ -2335,7 +2193,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				);
 			}
 			else if (currentStage == 0 && i > 0) {
-				// ステージ1の足場テクスチャ描画
 				Novice::DrawSprite(
 					static_cast<int>(platforms[i].x) + gShakeX,
 					static_cast<int>(platforms[i].y) + gShakeY,
@@ -2350,10 +2207,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Rect(platforms[i].x, platforms[i].y, platforms[i].w, h, (i == 0) ? 0x3E6B48FF : 0x8B6B4AFF);
 			}
 		}
-
-
-
-
 
 		if (scene == kPlay)
 		{
@@ -2370,7 +2223,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			float drawH = boss.h;
 			float drawY = boss.y;
-			// ステージ1は縮小演出を行わない
 			if (boss.type != 0)
 			{
 				if (boss.isBroken) {
@@ -2379,94 +2231,74 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					drawY = boss.y + crouch;
 				}
 			}
-			//=================================================
-			// ステージ1の吹き飛ばしエフェクトの描画
-			//=================================================
 			if (boss.type == 0 && boss.repelEffectTimer > 0) {
 				int totalFrames = 25;
 				int elapsed = totalFrames - boss.repelEffectTimer;
-				// 円の半径を大きくしていく
 				float radius = elapsed * 8.0f;
-				unsigned int alpha = static_cast<unsigned int>((boss.repelEffectTimer / static_cast<float>(totalFrames)) * 170.0f); // 0xAA(170)を最大
+				unsigned int alpha = static_cast<unsigned int>((boss.repelEffectTimer / static_cast<float>(totalFrames)) * 170.0f);
 				unsigned int color = 0x88CCFF00 | alpha;
 				Circle(boss.repelEffectX, boss.repelEffectY, radius, color);
 			}
-			// 危険オーラと！！を表示
 			if (boss.type == 0 && !boss.isBroken && boss.hitCount >= 7) {
 				float centerX = boss.x + boss.w * 0.5f;
 				float centerY = boss.y + boss.h * 0.5f;
-				int level = boss.hitCount - 6; // 7→1, 8→2, 9→3
+				int level = boss.hitCount - 6;
 				float warnRadius = 40.0f + level * 15.0f + (frame % 6) * 2.0f;
 				unsigned int warnAlpha = 0x30 + level * 0x20;
 				Circle(centerX, centerY, warnRadius, 0xFF332200 | warnAlpha);
 			}
-			//=================================================
-			//ステージ１のボスの描画
-			//=================================================
 			if (!boss.hidden)
 			{
 				if (boss.type == 0)
 				{
 					int currentTex = 0;
-					int frameW = kJesseFrameWidth; // 通常は 64
+					int frameW = kJesseFrameWidth;
 					int drawFrame = jesseAnimFrame;
 
 					if (boss.isDying) {
-						// やられモーション（1コマ 96x96）
 						currentTex = (boss.dir == 1) ? jessegottakendownLeftTexture : jessegottakendownRightTexture;
 						frameW = 96;
-						// 10フレームごとにコマを進め、3（4枚目）で止める
 						drawFrame = boss.dieTimer / 10;
 						if (drawFrame >= kJesseFrameCount) {
-							drawFrame = kJesseFrameCount - 1; // 3番目（4枚目）で固定
+							drawFrame = kJesseFrameCount - 1;
 						}
 					}
 					else if (boss.isBroken)
 					{
-						// ブレイク中
 						currentTex = (boss.dir == 1) ? jesseBreakRightTexture : jesseBreakLeftTexture;
 					}
 					else if (boss.repelEffectTimer > 0)
 					{
-						// 吹き飛ばし攻撃中
 						currentTex = (boss.dir == 1) ? jesseblowoffRightTexture : jesseblowoffLeftTexture;
 					}
 					else if (boss.state == 3) {
-						// チャージ・流星群攻撃中
 						currentTex = (boss.dir == 1) ? jesseChargeAttackRightTexture : jesseChargeAttackLeftTexture;
 					}
 					else if (boss.state == 0) {
-						// 通常移動
 						currentTex = (boss.dir == 1) ? jesseWalkRightTexture : jesseWalkLeftTexture;
 					}
 					else {
-						// 射撃攻撃中など
 						currentTex = (boss.dir == 1) ? jesseConsecutiveattacksRightTexture : jesseConsecutiveAttacksLeftTexture;
 					}
 
-					// ダメージ時の白点滅やブレイク時の色変化を反映
 					unsigned int spriteColor = 0xFFFFFFFF;
 					if (boss.flash > 0) {
-						spriteColor = 0xFF8888FF; // 被弾時に赤く光る（真っ白にしたい場合は 0xFFFFFFFF）
+						spriteColor = 0xFF8888FF;
 					}
 					else if (boss.isBroken) {
 						spriteColor = ((boss.breakTimer / 5) % 2 == 0) ? 0xFFCC00FF : 0x888899FF;
 					}
 					else if (boss.state == 3) {
-						spriteColor = 0xDD99FFFF; // チャージ中は少し紫がかる
+						spriteColor = 0xDD99FFFF;
 					}
 
-					// 縮む演出（ブレイクやチャージ）に合わせて縦の倍率を調整
 					float scaleY = drawH / boss.h;
 
-					// 描画するアニメーションコマ番号の決定
 					if (!boss.isDying && !boss.isBroken && boss.state == 3) {
 						if (boss.timer > 40) {
-							// メテオが降るまでは1枚目（0番目）をキープ
 							drawFrame = 0;
 						}
 						else {
-							// メテオが降り始めたら2〜4枚目（1〜3番目）をアニメーション
 							drawFrame = 1 + (jesseAnimFrame % 3);
 						}
 					}
@@ -2484,11 +2316,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						spriteColor
 					);
 				}
-				//=================================================
-				//ステージ２・３のボスの描画（四角形描画）
-				//=================================================
 				else {
-					// ステージ2・3は従来の四角形描画
 					Rect(boss.x, drawY, boss.w, drawH, bodyColor);
 
 					if (boss.type == 2) {
@@ -2512,11 +2340,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 			}
-			//ステージ１のエネミーのコウモリの描画
 			for (int i = 0; i < kMaxIntroBats; i++)
 			{
 				if (!introBats[i].active) continue;
-				// 密集している間は少しワサワサと小刻みに揺らす
 				int jitterX = (introTimer >= 80) ? ((rand() % 7) - 3) : 0;
 				int jitterY = (introTimer >= 80) ? ((rand() % 7) - 3) : 0;
 				Novice::DrawSpriteRect(
@@ -2536,33 +2362,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (boss.isBroken)
 			{
 				if (boss.type == 0) {
-					// ステージ1専用のブレイク中テキスト
 					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!!");
 				}
 				else {
-					// ステージ2・3のテキスト
 					PrintfCenter(static_cast<int>(boss.x + boss.w * 0.5f), static_cast<int>(drawY - 55.0f), "BREAK!! (1.5x DMG)");
 				}
 			}
-			// 吹き飛ばし中の文字表示
 			else if (boss.type == 0 && boss.repelEffectTimer > 0)
 			{
 				float centerX = boss.x + boss.w * 0.5f;
 				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "ハナレテ！");
 			}
-			// ステージ1の通常射撃（連射・3弾）の照準レーザー＆テキスト演出
 			else if (boss.type == 0 && (boss.state == 1 || boss.state == 2)) {
 				float centerX = boss.x + boss.w * 0.5f;
 				float muzzleX = centerX + boss.dir * 24.0f;
 				float muzzleY = boss.y + boss.h * 0.5f - 15.0f;
-				// 頭上テキスト表示
 				if (boss.state == 1) {
 					PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "レンシャ！");
 				}
 				else {
 					PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "カクサン！");
 				}
-				// 発射前の照準レーザー（赤い予告線）
 				bool isAiming = (boss.state == 1 && boss.timer > 45) || (boss.state == 2 && boss.timer > 35);
 				if (isAiming) {
 					int wayCount = (boss.state == 2) ? 1 : 0;
@@ -2580,21 +2400,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					}
 				}
 
-				// 発射瞬間のマズルフラッシュ
 				if (boss.muzzleFlashTimer > 0) {
 					float flashR = boss.muzzleFlashTimer * 3.5f;
 					Circle(muzzleX, muzzleY, flashR, 0xFFEE55CC);
 					Circle(muzzleX, muzzleY, flashR * 0.5f, 0xFFFFFFFF);
 				}
 			}
-			// ステージ1のチャージ中演出
 			else if (boss.type == 0 && boss.state == 3) {
 				float centerX = boss.x + boss.w * 0.5f;
 				float centerY = boss.y + boss.h * 0.5f;
 				float effectSize = 60.0f + (frame % 20) * 2.0f;
 				Circle(centerX, centerY, effectSize, 0xAA66FF55);
 				PrintfCenter(static_cast<int>(centerX), static_cast<int>(boss.y - 45.0f), "メテオコウゲキ！");
-				//画面上部に警告画像を3つ表示 
 				const int kCaveatW = 256;
 				const int kCaveatY = 90;
 				if (boss.timer > 40 && (frame / 6) % 2 == 0)
@@ -2670,10 +2487,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					Circle(b.x, b.y, b.r, 0x66FFFFFF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
-				// ステージ1の流星群攻撃（スプライト描画の復元）
 				else if (b.meteor)
 				{
-					int tex = b.rareMeteor ? rareMeteorTexture : meteorTexture; // ← テクスチャ切り替え
+					int tex = b.rareMeteor ? rareMeteorTexture : meteorTexture;
 					Novice::DrawSpriteRect(
 						static_cast<int>(b.x - kMeteorFrameWidth * 0.5f) + gShakeX,
 						static_cast<int>(b.y - kMeteorFrameHeight * 0.5f) + gShakeY,
@@ -2681,7 +2497,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						0,
 						kMeteorFrameWidth,
 						kMeteorFrameHeight,
-						tex, // ← ここを tex に変更
+						tex,
 						1.0f / 4.0f,
 						1.0f,
 						0.0f,
@@ -2700,37 +2516,75 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 				else
 				{
-					// ステージ1のエネミーの弾の描画
 					Circle(b.x, b.y, b.r, boss.type == 0 ? 0xFF55AAFF : 0xFF8800FF);
 					Circle(b.x, b.y, b.r * 0.5f, 0xFFFFFFFF);
 				}
 			}
 
+			// ==================================================
+			// プレイヤー描画（左右シート・128x92・6コマ構成）
+			// 1枚目(0): 通常 / 1〜4枚目(0〜3): 歩行ループ / 5〜6枚目(4〜5): 攻撃
+			// ==================================================
+			int playerTex = (player.dir == 1) ? rightPlayerSheetTexture : leftPlayerSheetTexture;
+			int playerFrameIndex = 0;
+
+			if (player.atkTimer > 0) {
+				// 5〜6枚目（インデックス 4, 5）を攻撃モーションに使用
+				playerFrameIndex = (player.atkStep % 2 == 0) ? 5 : 4;
+			}
+			else if (player.onGround && fabsf(player.vx) > 0.1f) {
+				// 1〜4枚目（インデックス 0〜3）を歩行ループに使用
+				playerFrameIndex = playerWalkAnimFrame;
+			}
+			else {
+				// 1枚目（インデックス 0）を通常状態に使用
+				playerFrameIndex = 0;
+			}
+
+			unsigned int playerColor = 0xFFFFFFFF;
+			if (player.dashTimer > 0) {
+				playerColor = 0xAAEEFFFF;
+			}
+
+			float spriteDrawX = player.x + (player.w - kPlayerFrameWidth) * 0.5f;
+			float spriteDrawY = player.y + player.h - kPlayerFrameHeight;
+			float rx = ReverseX(spriteDrawX, static_cast<float>(kPlayerFrameWidth));
+			float ry = ReverseY(spriteDrawY, static_cast<float>(kPlayerFrameHeight));
+
 			if (player.dashTimer > 0) {
 				for (int i = 1; i <= 3; i++) {
-					Rect(player.x - player.dashDir * i * 18.0f, player.y, player.w, player.h, 0x4AA8FF40);
+					float afterX = ReverseX(spriteDrawX - player.dashDir * i * 18.0f, static_cast<float>(kPlayerFrameWidth));
+					Novice::DrawSpriteRect(
+						static_cast<int>(afterX) + gShakeX,
+						static_cast<int>(ry) + gShakeY,
+						playerFrameIndex * kPlayerFrameWidth,
+						0,
+						kPlayerFrameWidth,
+						kPlayerFrameHeight,
+						playerTex,
+						1.0f / 6.0f,
+						1.0f,
+						0.0f,
+						0x4AA8FF40
+					);
 				}
 			}
+
 			if (!(player.invincible > 0 && (player.invincible / 4) % 2 == 0)) {
-				Rect(player.x, player.y, player.w, player.h, (player.dashTimer > 0) ? 0x4AA8FF99 : 0x4AA8FFFF);
-				float eyeXp = (player.dir == 1) ? player.x + 20.0f : player.x + 4.0f;
-				Rect(eyeXp, player.y + 10.0f, 8.0f, 8.0f, 0xFFFFFFFF);
+				Novice::DrawSpriteRect(
+					static_cast<int>(rx) + gShakeX,
+					static_cast<int>(ry) + gShakeY,
+					playerFrameIndex * kPlayerFrameWidth,
+					0,
+					kPlayerFrameWidth,
+					kPlayerFrameHeight,
+					playerTex,
+					1.0f / 6.0f,
+					1.0f,
+					0.0f,
+					playerColor
+				);
 			}
-			/*		float eyeXp = (player.dir == 1)
-						? player.x + 20.0f
-						: player.x + 4.0f;
-
-					Rect(
-						ReverseX(eyeXp, 8.0f),
-						ReverseY(player.y + 10.0f, 8.0f),
-						8.0f,
-						8.0f,
-						0xFFFFFFFF
-					);
-		*/
-
-
-
 
 			if (player.atkTimer > 0 && player.atkTimer <= player.atkHi && player.atkTimer >= player.atkLo) {
 				float sx, sy, sw, sh;
@@ -2785,18 +2639,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0x333333FF, kFillModeSolid);
 			Novice::DrawBox(440, 58, breakW, 10, 0.0f, breakColor, kFillModeSolid);
 			Novice::DrawBox(440, 58, 400, 10, 0.0f, 0xCCCCCCFF, kFillModeWireFrame);
-			// ステージ1 撃破演出（ホワイトフラッシュ ＆ 衝撃波リング）
+
 			if (boss.type == 0 && boss.isDying) {
 				float bcx = boss.x + boss.w * 0.5f;
 				float bcy = boss.y + boss.h * 0.5f;
 
-				// ホワイトフラッシュ
 				if (hitStopTimer > 0) {
 					unsigned int flashAlpha = static_cast<unsigned int>((hitStopTimer / 15.0f) * 210.0f);
 					Novice::DrawBox(0, 0, kScreenW, kScreenH, 0.0f, 0xFFFFFF00 | flashAlpha, kFillModeSolid);
 				}
 
-				// 衝撃波リング（二重）
 				if (hitStopTimer == 0 && boss.dieTimer < 45) {
 					float progress = boss.dieTimer / 45.0f;
 					unsigned int ringAlpha = static_cast<unsigned int>((1.0f - progress) * 200.0f);
