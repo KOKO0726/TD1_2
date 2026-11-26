@@ -8,7 +8,7 @@
 
 #include "FontRenderer.h"
 
-const char kWindowTitle[] = "LC1B_05_ウエノユウタ";
+const char kWindowTitle[] = "1262_cutie_cat_counter";
 
 // ==================================================
 // 定数
