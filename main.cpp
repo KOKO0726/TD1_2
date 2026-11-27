@@ -675,6 +675,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int jessegottakendownLeftTexture = Novice::LoadTexture("./Resources/images/jessegottakendownLeft.png");
 	int jessegottakendownRightTexture = Novice::LoadTexture("./Resources/images/jessegottakendownRight.png");
 	int jesseshadowTexture = Novice::LoadTexture("./Resources/images/jesseshadow.png");
+	int jesseflyTexture = Novice::LoadTexture("./Resources/images/jessefly.png");
 	int scaffoldTexture = Novice::LoadTexture("./Resources/images/scaffold.png");
 	int backGroundTexture = Novice::LoadTexture("./Resources/images/background.png");
 	int groundTexture = Novice::LoadTexture("./Resources/images/ground.png");
@@ -747,6 +748,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int batAnimTimer = 0;
 
 	IntroBat introBats[kMaxIntroBats] = {};
+
+	// タイトル隠し演出（Jesse飛行）用変数
+	const int kJesseFlyFrameWidth = 64;
+	const int kJesseFlyFrameHeight = 96;
+	const int kJesseFlyFrameCount = 4;
+	const int kJesseFlyAnimSpeed = 18;
+
+	bool isTitleJesseFlying = false;
+	float titleJesseX = 0.0f;
+	float titleJesseY = 0.0f;
+	float titleJesseBaseY = 0.0f;
+	float titleJesseVx = 0.0f;
+	int titleJesseWaitTimer = 300; // 最初の出現までの待機フレーム（約5秒）
+	int titleJesseAnimFrame = 0;
+	int titleJesseAnimTimer = 0;
+
 	srand(static_cast<unsigned int>(time(nullptr)));
 
 	Platform platforms[kPlatformNum] = {
@@ -794,6 +811,47 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 他シーンのBGMが鳴っていたら止める
 			if (Novice::IsPlayingAudio(stageSelectBgmHandle)) {
 				Novice::StopAudio(stageSelectBgmHandle);
+			}
+			//タイトル隠し演出
+			if (!isTitleJesseFlying) {
+				titleJesseWaitTimer--;
+				if (titleJesseWaitTimer <= 0) {
+					isTitleJesseFlying = true;
+					// 50%の確率で左から右、または右から左へ飛ぶ
+					bool fromLeft = (rand() % 2 == 0);
+					if (fromLeft) {
+						titleJesseX = -static_cast<float>(kJesseFlyFrameWidth);
+						titleJesseVx = 4.5f;
+					}
+					else {
+						titleJesseX = static_cast<float>(kScreenW);
+						titleJesseVx = -4.5f;
+					}
+					// Y座標は画面上側〜中央あたり（80〜450）でランダム
+					titleJesseBaseY = static_cast<float>(80 + rand() % 370);
+					titleJesseY = titleJesseBaseY;
+					titleJesseAnimFrame = 0;
+					titleJesseAnimTimer = 0;
+				}
+			}
+			else {
+				// 横移動 ＋ サイン波でふわふわ上下に揺らす
+				titleJesseX += titleJesseVx;
+				titleJesseY = titleJesseBaseY + sinf(frame * 0.08f) * 18.0f;
+
+				// スプライトアニメーション更新
+				titleJesseAnimTimer++;
+				if (titleJesseAnimTimer >= kJesseFlyAnimSpeed) {
+					titleJesseAnimTimer = 0;
+					titleJesseAnimFrame = (titleJesseAnimFrame + 1) % kJesseFlyFrameCount;
+				}
+
+				// 画面外に完全に抜けたらリセットして次の出現まで待機（約8〜15秒）
+				if ((titleJesseVx > 0.0f && titleJesseX > kScreenW + 20.0f) ||
+					(titleJesseVx < 0.0f && titleJesseX < -kJesseFlyFrameWidth - 20.0f)) {
+					isTitleJesseFlying = false;
+					titleJesseWaitTimer = 480 + rand() % 420;
+				}
 			}
 
 			if (pressStart) {
@@ -2689,7 +2747,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 			GetFont().Printf(20, 62, "TIME: %.1f", playFrames / 60.0f);
 
-			const char* bossNames[3] = { "SNIPER BOSS", "CRUSHER BOSS", "WIZARD BOSS" };
+			const char* bossNames[3] = { "Jesse", "CRUSHER BOSS", "WIZARD BOSS" };
 			PrintfCenter(640, 6, "STAGE %d : %s", currentStage + 1, bossNames[currentStage]);
 			Novice::DrawBox(440, 36, 400, 18, 0.0f, 0x444444FF, kFillModeSolid);
 			Novice::DrawBox(440, 36, 400 * boss.hp / boss.maxHp, 18, 0.0f, 0xE03030FF, kFillModeSolid);
@@ -2725,7 +2783,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 		}
+		//タイトルでキャラクターが飛ぶ
 		if (scene == kTitle) {
+			if (isTitleJesseFlying) {
+
+				float scaleX = (titleJesseVx < 0.0f) ? -1.0f : 1.0f;
+				int drawX = static_cast<int>(titleJesseX);
+				if (scaleX < 0.0f) {
+					drawX += kJesseFlyFrameWidth;
+				}
+
+				Novice::DrawSpriteRect(
+					drawX,
+					static_cast<int>(titleJesseY),
+					titleJesseAnimFrame * kJesseFlyFrameWidth,
+					0,
+					kJesseFlyFrameWidth,
+					kJesseFlyFrameHeight,
+					jesseflyTexture,
+					(1.0f / static_cast<float>(kJesseFlyFrameCount)) * scaleX,
+					1.0f,
+					0.0f,
+					0xFFFFFFFF
+				);
+			}
+
 			PrintfCenter(640, 150, "=== BOSS BATTLE ===");
 			if ((frame / 30) % 2 == 0) {
 				PrintfCenter(640, 360, "PRESS SPACE TO START");
@@ -2755,7 +2837,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				unsigned int shadowColor = isSelected ? 0xFFFFFF99 : 0xFFFFFF44;
 				if (i == 0) {
 					// ステージ1のキャラを四角の中央付近に描画
-					float scale = 2.0f; 
+					float scale = 2.0f;
 					int imgW = static_cast<int>(64 * scale);
 					int imgH = static_cast<int>(96 * scale);
 					int drawX = centerX - imgW / 2;
